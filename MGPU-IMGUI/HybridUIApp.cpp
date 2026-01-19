@@ -13,6 +13,7 @@
 #include "SkyBox.h"
 #include "Transform.h"
 #include "Window.h"
+#include "Orbiter.h"
 
 HybridUIApp::HybridUIApp(const HINSTANCE hInstance) : D3DApp(hInstance)
 {
@@ -195,7 +196,19 @@ void HybridUIApp::PopulateForwardPathCommands(const std::shared_ptr<GCommandList
         PopulateDrawCommands(cmdList, (RenderMode::SkyBox));
 
         cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Opaque));
-        PopulateDrawCommands(cmdList, (RenderMode::Opaque));
+        if (mirrorSphereRenderer != nullptr)
+        {
+            PopulateDrawCommandsExcept(cmdList, RenderMode::Opaque, mirrorSphereRenderer.get());
+
+            cmdList->SetRootDescriptorTable(StandardShaderSlot::SkyMap, &srvTexturesMemory, dynamicCubeMapSrvIndex);
+            mirrorSphereRenderer->Draw(cmdList);
+            cmdList->SetRootDescriptorTable(StandardShaderSlot::SkyMap, &srvTexturesMemory, skyCubeMapTexIndex);
+        }
+        else
+        {
+            PopulateDrawCommands(cmdList, RenderMode::Opaque);
+        }
+
 
         cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::OpaqueAlphaDrop));
         PopulateDrawCommands(cmdList, (RenderMode::OpaqueAlphaDrop));
@@ -216,6 +229,15 @@ void HybridUIApp::PopulateDrawCommands(const std::shared_ptr<GCommandList>& cmdL
 {
     for (auto&& renderer : typedRenderer[static_cast<int>(type)])
     {
+        renderer->Draw(cmdList);
+    }
+}
+
+void HybridUIApp::PopulateDrawCommandsExcept(const std::shared_ptr<GCommandList>& cmdList, RenderMode type, const Renderer* excluded) const
+{
+    for (auto&& renderer : typedRenderer[static_cast<int>(type)])
+    {
+        if (renderer.get() == excluded) continue;
         renderer->Draw(cmdList);
     }
 }
@@ -299,6 +321,7 @@ void HybridUIApp::Draw(const GameTimer& gt)
     PopulateNormalMapCommands(primeCmdList);
     PopulateAmbientMapCommands(primeCmdList);
     PopulateShadowMapCommands(primeCmdList);
+    PopulateDynamicCubeMapCommands(primeCmdList);
     PopulateForwardPathCommands(primeCmdList);
     PopulateInitRenderTarget(primeCmdList, MainWindow->GetCurrentBackBuffer(),
                              &currentFrameResource->BackBufferRTVMemory, 0);
@@ -393,7 +416,7 @@ void HybridUIApp::InitFrameResource()
 {
     for (int i = 0; i < globalCountFrameResources; ++i)
     {
-        frameResources.emplace_back(std::make_unique<FrameResource>(primeDevice, primeDevice, 2, assets->GetMaterials().size()));
+        frameResources.emplace_back(std::make_unique<FrameResource>(primeDevice, primeDevice, 8, assets->GetMaterials().size()));
     }
     logQueue.Push(std::wstring(L"\nInit FrameResource "));
 }
@@ -537,13 +560,32 @@ void HybridUIApp::CreateMaterials()
 
     models[L"quad"]->SetMeshMaterial(0, assets->GetMaterial(assets->GetMaterialIndex(L"seamless")));
 
+    auto mirror = std::make_shared<Material>(L"mirror", RenderMode::Opaque);
+    mirror->DiffuseAlbedo = Vector4(0.0f, 0.0f, 0.0f, 1.0f);
+    mirror->FresnelR0 = Vector3(0.98f, 0.98f, 0.98f);
+    mirror->Roughness = 0.02f;
+
+    mirror->EnableEnvReflection = 1;
+
+    // diffuse = белый 1x1 (чтобы не было "травы")
+    auto white = assets->GetTextureIndex(L"seamless");
+    mirror->SetDiffuseTexture(assets->GetTexture(white), white);
+
+    // нормаль можно оставить defaultNormalMap
+    auto nrm = assets->GetTextureIndex(L"defaultNormalMap");
+    mirror->SetNormalMap(assets->GetTexture(nrm), nrm);
+
+    assets->AddMaterial(mirror);
+    mirror->SetMaterialIndex(assets->GetMaterialIndex(L"mirror"));
+    models[L"mirrorSphere"]->SetMeshMaterial(0, mirror);
+
+
     logQueue.Push(std::wstring(L"\nCreate Materials"));
 }
 
 void HybridUIApp::InitSRVMemoryAndMaterials()
 {
-    srvTexturesMemory =
-        primeDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, assets->GetTextures().size());
+    srvTexturesMemory = primeDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, assets->GetTextures().size() + 1);
 
     auto materials = assets->GetMaterials();
 
@@ -553,6 +595,8 @@ void HybridUIApp::InitSRVMemoryAndMaterials()
 
         material->InitMaterial(&srvTexturesMemory);
     }
+    dynamicCubeMapSrvIndex = static_cast<UINT>(assets->GetTextures().size());
+    dynamicCubeMap->BuildSRV(&srvTexturesMemory, dynamicCubeMapSrvIndex);
 
     logQueue.Push(std::wstring(L"\nInit Views for " + primeDevice->GetName()));
     ambientPrimePath->BuildDescriptors();
@@ -599,6 +643,8 @@ void HybridUIApp::InitRenderPaths()
 
     primeDeviceUITexture = GTexture(primeDevice, MainWindow->GetCurrentBackBuffer().GetD3D12ResourceDesc(),
                                     L"Prime Device UI Texture", TextureUsage::RenderTarget, &optClear);
+   
+    dynamicCubeMap = std::make_shared<CubeMapRenderTarget>(primeDevice, DynamicCubeMapSize, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT);
 }
 
 
@@ -632,6 +678,8 @@ void HybridUIApp::LoadStudyTexture()
     skyTex->SetName(L"skyTex");
     assets->AddTexture(skyTex);
 
+    skyCubeMapTexIndex = assets->GetTextureIndex(L"skyTex");
+
     auto grassTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\grass.dds", cmdList);
     grassTex->SetName(L"grassTex");
     assets->AddTexture(grassTex);
@@ -643,7 +691,10 @@ void HybridUIApp::LoadStudyTexture()
     auto seamless = GTexture::LoadTextureFromFile(L"Data\\Textures\\seamless_grass.jpg", cmdList);
     seamless->SetName(L"seamless");
     assets->AddTexture(seamless);
-
+    
+    auto white1x1 = GTexture::LoadTextureFromFile(L"Data\\Textures\\white_pixel.dds", cmdList);
+    white1x1->SetName(L"white1x1Tex");
+    assets->AddTexture(white1x1);
 
     std::vector<std::wstring> texNormalNames =
     {
@@ -722,6 +773,8 @@ void HybridUIApp::LoadModels()
 
     auto doom = assets->CreateModelFromFile(cmdList, "Data\\Objects\\DoomSlayer\\doommarine.obj");
     models[L"doom"] = std::move(doom);
+
+    models[L"mirrorSphere"] = assets->GenerateSphere(cmdList);
 
     queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
     Flush();
@@ -817,6 +870,21 @@ void HybridUIApp::CreateGO()
     }
     gameObjects.push_back(std::move(skySphere));
 
+    auto mirrorSphere = std::make_unique<GameObject>("MirrorSphere");
+    mirrorSphere->GetTransform()->SetPosition(Vector3(0.0f, 20.0f, 0.0f));
+    mirrorSphere->GetTransform()->SetScale(Vector3(2.0f, 2.0f, 2.0f));
+
+    auto mirrorRenderer = std::make_shared<ModelRenderer>(primeDevice, models[L"mirrorSphere"]);
+    mirrorSphere->AddComponent(mirrorRenderer);
+
+    typedRenderer[static_cast<int>(RenderMode::Opaque)].push_back(mirrorRenderer);
+
+    mirrorSphereRenderer = mirrorRenderer;
+    mirrorSphereTransform = mirrorSphere->GetTransform();
+
+    gameObjects.push_back(std::move(mirrorSphere));
+
+
     auto quadRitem = std::make_unique<GameObject>("Quad");
     {
         auto renderer = std::make_shared<ModelRenderer>(primeDevice,
@@ -856,6 +924,23 @@ void HybridUIApp::CreateGO()
         typedRenderer[static_cast<int>(RenderMode::Opaque)].push_back(renderer);
         gameObjects.push_back(std::move(doom));
     }
+
+    auto orbitNano = std::make_unique<GameObject>("OrbitNano");
+    orbitNano->SetScale(0.5f);
+    auto orbitRenderer = std::make_shared<ModelRenderer>(primeDevice, models[L"nano"]);
+    orbitNano->AddComponent(orbitRenderer);
+    typedRenderer[static_cast<int>(RenderMode::Opaque)].push_back(orbitRenderer);
+
+    auto orbit = std::make_shared<Orbiter>(
+        mirrorSphereTransform,
+        Vector3(5.0f, -5.0f, 0.0f),
+        0.8f,
+        Vector3(0.0f, 90.0f, 0.0f)
+    );
+    orbitNano->AddComponent(orbit);
+
+    gameObjects.push_back(std::move(orbitNano));
+
 
     for (int i = 0; i < 12; ++i)
     {
@@ -897,8 +982,8 @@ void HybridUIApp::CreateGO()
 
     auto camera = std::make_unique<GameObject>("MainCamera");
     camera->GetTransform()->SetParent(rotater->GetTransform().get());
-    camera->GetTransform()->SetEulerRotate(Vector3(-30, 270, 0));
-    camera->GetTransform()->SetPosition(Vector3(-1000, 190, -32));
+    camera->GetTransform()->SetEulerRotate(Vector3(-30, 180, 0));
+    camera->GetTransform()->SetPosition(Vector3(0, -200, -20));
     camera->AddComponent(std::make_shared<Camera>(AspectRatio()));
 
 #if defined(DEBUG) || defined(_DEBUG)
@@ -1526,4 +1611,138 @@ LRESULT HybridUIApp::MsgProc(const HWND hwnd, const UINT msg, const WPARAM wPara
         }
 
         return D3DApp::MsgProc(hwnd, msg, wParam, lParam);
+    }
+
+    std::array<PassConstants, HybridUIApp::DynamicCubeMapFaceCount> HybridUIApp::BuildCubeFacePassCBs(const Vector3& center) const
+    {
+        const float nearZ = 0.1f;
+        const float farZ = 500.0f;
+
+        Matrix proj = XMMatrixPerspectiveFovLH(0.5f * XM_PI, 1.0f, nearZ, farZ);
+
+        std::array<Vector3, DynamicCubeMapFaceCount> targets =
+        {
+            center + Vector3(1.0f, 0.0f, 0.0f),
+            center + Vector3(-1.0f, 0.0f, 0.0f),
+            center + Vector3(0.0f, 1.0f, 0.0f),
+            center + Vector3(0.0f, -1.0f, 0.0f),
+            center + Vector3(0.0f, 0.0f, 1.0f),
+            center + Vector3(0.0f, 0.0f, -1.0f)
+        };
+
+        std::array<Vector3, DynamicCubeMapFaceCount> ups =
+        {
+            Vector3(0.0f, 1.0f, 0.0f),
+            Vector3(0.0f, 1.0f, 0.0f),
+            Vector3(0.0f, 0.0f, -1.0f),
+            Vector3(0.0f, 0.0f, 1.0f),
+            Vector3(0.0f, 1.0f, 0.0f),
+            Vector3(0.0f, 1.0f, 0.0f)
+        };
+
+        Matrix T = Matrix(
+            0.5f, 0.0f, 0.0f, 0.0f,
+            0.0f, -0.5f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.5f, 0.5f, 0.0f, 1.0f
+        );
+
+        std::array<PassConstants, DynamicCubeMapFaceCount> out{};
+
+        for (UINT i = 0; i < DynamicCubeMapFaceCount; ++i)
+        {
+            auto eye = XMVectorSet(center.x, center.y, center.z, 1.0f);
+            auto at = XMVectorSet(targets[i].x, targets[i].y, targets[i].z, 1.0f);
+            auto up = XMVectorSet(ups[i].x, ups[i].y, ups[i].z, 0.0f);
+
+            Matrix view = XMMatrixLookAtLH(eye, at, up);
+            Matrix viewProj = view * proj;
+
+            PassConstants pass = mainPassCB;
+
+            pass.View = view.Transpose();
+            pass.InvView = view.Invert().Transpose();
+            pass.Proj = proj.Transpose();
+            pass.InvProj = proj.Invert().Transpose();
+            pass.ViewProj = viewProj.Transpose();
+            pass.InvViewProj = viewProj.Invert().Transpose();
+            pass.ViewProjTex = (viewProj * T).Transpose();
+
+            pass.EyePosW = center;
+
+            pass.RenderTargetSize = Vector2(static_cast<float>(DynamicCubeMapSize), static_cast<float>(DynamicCubeMapSize));
+            pass.InvRenderTargetSize = Vector2(1.0f / DynamicCubeMapSize, 1.0f / DynamicCubeMapSize);
+
+            pass.NearZ = nearZ;
+            pass.FarZ = farZ;
+
+            out[i] = pass;
+        }
+
+        return out;
+    }
+
+    void HybridUIApp::PopulateDynamicCubeMapCommands(const std::shared_ptr<GCommandList>& cmdList)
+    {
+        if (dynamicCubeMap == nullptr) return;
+        if (mirrorSphereTransform == nullptr) return;
+
+        Vector3 center = mirrorSphereTransform->GetWorldPosition();
+
+        cmdList->SetDescriptorsHeap(&srvTexturesMemory);
+
+        cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        cmdList->TransitionBarrier(dynamicCubeMap->GetDepthMap(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        cmdList->FlushResourceBarriers();
+
+        auto vp = dynamicCubeMap->GetViewport();
+        auto rect = dynamicCubeMap->GetScissorRect();
+        cmdList->SetViewports(&vp, 1);
+        cmdList->SetScissorRects(&rect, 1);
+
+        cmdList->SetRootShaderResourceView(StandardShaderSlot::MaterialData, *currentFrameResource->MaterialBuffer);
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::TexturesMap, &srvTexturesMemory);
+
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::ShadowMap, shadowPath->GetSrv());
+        auto whiteSsao = assets->GetTextureIndex(L"white1x1Tex");
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap, &srvTexturesMemory, whiteSsao);
+
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::SkyMap, &srvTexturesMemory, skyCubeMapTexIndex);
+
+        auto cubePasses = BuildCubeFacePassCBs(center);
+
+        for (UINT face = 0; face < DynamicCubeMapFaceCount; ++face)
+        {
+            UINT passIndex = DynamicCubeMapFirstPassIndex + face;
+            currentFrameResource->PrimePassConstantUploadBuffer->CopyData(passIndex, cubePasses[face]);
+
+            cmdList->SetRootConstantBufferView(StandardShaderSlot::CameraData, *currentFrameResource->PrimePassConstantUploadBuffer, passIndex);
+
+            cmdList->ClearRenderTarget(dynamicCubeMap->GetRTV(), face, Colors::Black);
+            cmdList->ClearDepthStencil(dynamicCubeMap->GetDSV(), 0, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0);
+
+            cmdList->SetRenderTargets(1, dynamicCubeMap->GetRTV(), face, dynamicCubeMap->GetDSV());
+
+            cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::SkyBox));
+            PopulateDrawCommands(cmdList, RenderMode::SkyBox);
+
+            cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Opaque));
+            if (mirrorSphereRenderer != nullptr)
+            {
+                PopulateDrawCommandsExcept(cmdList, RenderMode::Opaque, mirrorSphereRenderer.get());
+            }
+            else
+            {
+                PopulateDrawCommands(cmdList, RenderMode::Opaque);
+            }
+
+            cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::OpaqueAlphaDrop));
+            PopulateDrawCommands(cmdList, RenderMode::OpaqueAlphaDrop);
+
+            cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Transparent));
+            PopulateDrawCommands(cmdList, RenderMode::Transparent);
+        }
+
+        cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(), D3D12_RESOURCE_STATE_GENERIC_READ);
+        cmdList->FlushResourceBarriers();
     }

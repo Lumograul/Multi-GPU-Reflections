@@ -11,6 +11,8 @@
 #include "GDeviceFactory.h"
 #include "Light.h"
 #include "UILayer.h"
+#include "CubeMapRenderTarget.h"
+#include "Transform.h"
 
 class HybridUIApp :
     public Common::D3DApp
@@ -130,4 +132,21 @@ protected:
     Vector3 mRotatedLightDirections[3];
 
     DirectX::BoundingSphere mSceneBounds;
+
+    static constexpr UINT DynamicCubeMapFaceCount = 6;
+    static constexpr UINT DynamicCubeMapFirstPassIndex = 2;
+    static constexpr UINT DynamicCubeMapSize = 1024;
+
+    std::shared_ptr<CubeMapRenderTarget> dynamicCubeMap = nullptr;
+    UINT dynamicCubeMapSrvIndex = 0;
+    UINT skyCubeMapTexIndex = 0;
+
+    std::shared_ptr<Renderer> mirrorSphereRenderer = nullptr;
+    std::shared_ptr <Transform> mirrorSphereTransform = nullptr;
+
+    void PopulateDynamicCubeMapCommands(const std::shared_ptr<GCommandList>& cmdList);
+    std::array<PassConstants, DynamicCubeMapFaceCount> BuildCubeFacePassCBs(const Vector3& center) const;
+
+    void PopulateDrawCommandsExcept(const std::shared_ptr<GCommandList>& cmdList, RenderMode type, const Renderer* excluded) const;
+
 };

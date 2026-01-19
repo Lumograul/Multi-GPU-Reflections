@@ -95,4 +95,7 @@ public:
     Vector3 FresnelR0 = {0.01f, 0.01f, 0.01f};
     float Roughness = .25f;
     Matrix MatTransform = Matrix::Identity;
+
+    UINT EnableEnvReflection = 0;
+
 };

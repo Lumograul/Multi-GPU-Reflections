@@ -94,15 +94,24 @@ float4 PS(VertexOut pin) : SV_Target
     float4 litColor = ambient + directLight;
 
 
+    if (matData.MatPad1 != 0)
+    {
+    // Вектор из точки на поверхности к камере
+        float3 V = toEyeW;
+
+    // Направление отражения для кубмапы
+        float3 R = reflect(-V, bumpedNormalW);
+
+    // Цвет окружения из SkyMap (у тебя SkyMap = TextureCube register(t0) уже объявлен в Common.hlsl)
+        float3 envColor = SkyMap.Sample(gsamLinearWrap, R).rgb;
+
+    // Fresnel по Шлику: для "взгляда" используем V (а не R)
+        float3 F = SchlickFresnel(fresnelR0, bumpedNormalW, V);
+
+    // shininess у тебя уже вычислен (зависит от roughness и alpha normal map)
+        litColor.rgb += envColor * F * shininess;
+    }
+
     litColor.a = diffuseAlbedo.a;
-    return litColor;
-
-    float3 r = reflect(-toEyeW, bumpedNormalW);
-    //float4 reflectionColor = SkyMap.Sample(gsamLinearWrap, r);
-    float3 fresnelFactor = SchlickFresnel(fresnelR0, bumpedNormalW, r);
-    litColor.rgb += shininess * fresnelFactor; // * reflectionColor.rgb;
-
-    //litColor.a = diffuseAlbedo.a;
-
     return litColor;
 }
