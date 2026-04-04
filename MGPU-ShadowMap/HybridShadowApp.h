@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #include "AssetsLoader.h"
 #include "d3dApp.h"
 #include "GDeviceFactory.h"
@@ -13,6 +15,8 @@
 #include "SSAA.h"
 #include "SSAO.h"
 #include "GCrossAdapterResource.h"
+#include "CubeMapRenderTarget.h"
+#include "Transform.h"
 
 using namespace DirectX::SimpleMath;
 using namespace PEPEngine;
@@ -148,6 +152,17 @@ private:
     Matrix mLightProj = Matrix::Identity;
     Matrix mShadowTransform = Matrix::Identity;
 
+    static constexpr UINT DynamicCubeMapFaceCount = 6;
+    static constexpr UINT DynamicCubeMapFirstPassIndex = 2;
+    static constexpr UINT DynamicCubeMapSize = 1024;
+
+    std::shared_ptr<CubeMapRenderTarget> dynamicCubeMap = nullptr;
+    UINT dynamicCubeMapSrvIndex = 0;
+    UINT skyCubeMapTexIndex = 0;
+
+    std::shared_ptr<Renderer> mirrorSphereRenderer = nullptr;
+    std::shared_ptr<Transform> mirrorSphereTransform = nullptr;
+
     float mLightRotationAngle = 0.0f;
     Vector3 mBaseLightDirections[3] = {
         Vector3(0.57735f, -0.57735f, 0.57735f),
@@ -163,5 +178,9 @@ private:
     UINT pathMapShow = 0;
     //off, shadowMap, ssaoMap
     const UINT maxPathMap = 3;
+    void inline PopulateDynamicCubeMapCommands(const std::shared_ptr<GCommandList>& cmdList);
+    std::array<PassConstants, DynamicCubeMapFaceCount> inline BuildCubeFacePassCBs(const Vector3& center) const;
+    void inline PopulateDrawCommandsExcept(GraphicsAdapter adapterIndex, const std::shared_ptr<GCommandList>& cmdList,
+                                           RenderMode type, const Renderer* excluded);
     LRESULT MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) override;
 };
