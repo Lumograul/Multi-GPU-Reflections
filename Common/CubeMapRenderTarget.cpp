@@ -8,7 +8,11 @@ CubeMapRenderTarget::CubeMapRenderTarget(const std::shared_ptr<GDevice>& device,
     viewport = { 0.0f, 0.0f, static_cast<float>(size), static_cast<float>(size), 0.0f, 1.0f };
     scissorRect = { 0, 0, static_cast<int>(size), static_cast<int>(size) };
 
-    rtvMemory = this->device->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 6);
+    for (UINT i = 0; i < FaceCount; ++i)
+    {
+        rtvMemory[i] = this->device->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1);
+    }
+
     dsvMemory = this->device->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1);
 
     BuildResources();
@@ -32,15 +36,45 @@ void CubeMapRenderTarget::BuildSRV(GDescriptor* srvHeap, UINT srvIndex)
 {
     this->srvIndex = srvIndex;
 
-    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    srvDesc.Format = format;
-    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
-    srvDesc.TextureCube.MostDetailedMip = 0;
-    srvDesc.TextureCube.MipLevels = 1;
-    srvDesc.TextureCube.ResourceMinLODClamp = 0.0f;
+    D3D12_SHADER_RESOURCE_VIEW_DESC cubeSrvDesc{};
+    cubeSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    cubeSrvDesc.Format = format;
+    cubeSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+    cubeSrvDesc.TextureCube.MostDetailedMip = 0;
+    cubeSrvDesc.TextureCube.MipLevels = 1;
+    cubeSrvDesc.TextureCube.ResourceMinLODClamp = 0.0f;
 
-    cubeMap.CreateShaderResourceView(&srvDesc, srvHeap, srvIndex);
+    cubeMap.CreateShaderResourceView(&cubeSrvDesc, srvHeap, srvIndex);
+}
+
+void CubeMapRenderTarget::CopyToCubeMap(const std::shared_ptr<GCommandList>& cmdList)
+{
+    cmdList->TransitionBarrier(cubeMap, D3D12_RESOURCE_STATE_COPY_DEST);
+    for (UINT face = 0; face < FaceCount; ++face)
+    {
+        cmdList->TransitionBarrier(cubeMaps[face], D3D12_RESOURCE_STATE_COPY_SOURCE);
+    }
+    cmdList->FlushResourceBarriers();
+
+    auto graphicsCmdList = cmdList->GetGraphicsCommandList();
+    auto dstResource = cubeMap.GetD3D12Resource();
+
+    for (UINT face = 0; face < FaceCount; ++face)
+    {
+        auto srcResource = cubeMaps[face].GetD3D12Resource();
+
+        D3D12_TEXTURE_COPY_LOCATION dstLocation{};
+        dstLocation.pResource = dstResource.Get();
+        dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        dstLocation.SubresourceIndex = face;
+
+        D3D12_TEXTURE_COPY_LOCATION srcLocation{};
+        srcLocation.pResource = srcResource.Get();
+        srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        srcLocation.SubresourceIndex = 0;
+
+        graphicsCmdList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
+    }
 }
 
 UINT CubeMapRenderTarget::GetSize() const
@@ -53,14 +87,24 @@ GTexture& CubeMapRenderTarget::GetCubeMap()
     return cubeMap;
 }
 
+GTexture& CubeMapRenderTarget::GetCubeMap(UINT faceIndex)
+{
+    return cubeMaps[faceIndex];
+}
+
+std::array<GTexture, CubeMapRenderTarget::FaceCount>& CubeMapRenderTarget::GetCubeMaps()
+{
+    return cubeMaps;
+}
+
 GTexture& CubeMapRenderTarget::GetDepthMap()
 {
     return depthMap;
 }
 
-GDescriptor* CubeMapRenderTarget::GetRTV()
+GDescriptor* CubeMapRenderTarget::GetRTV(UINT faceIndex)
 {
-    return &rtvMemory;
+    return &rtvMemory[faceIndex];
 }
 
 GDescriptor* CubeMapRenderTarget::GetDSV()
@@ -78,8 +122,9 @@ const D3D12_RECT& CubeMapRenderTarget::GetScissorRect() const
     return scissorRect;
 }
 
-UINT CubeMapRenderTarget::GetSrvIndex() const
+UINT CubeMapRenderTarget::GetSrvIndex(UINT faceIndex) const
 {
+    (void)faceIndex;
     return srvIndex;
 }
 
@@ -90,7 +135,7 @@ void CubeMapRenderTarget::BuildResources()
     cubeDesc.Alignment = 0;
     cubeDesc.Width = size;
     cubeDesc.Height = size;
-    cubeDesc.DepthOrArraySize = 6;
+    cubeDesc.DepthOrArraySize = 1;
     cubeDesc.MipLevels = 1;
     cubeDesc.Format = format;
     cubeDesc.SampleDesc.Count = 1;
@@ -101,7 +146,17 @@ void CubeMapRenderTarget::BuildResources()
     const float clear[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     CD3DX12_CLEAR_VALUE clearColor(format, clear);
 
-    cubeMap = GTexture(device, cubeDesc, L"DynamicCubeMap", TextureUsage::RenderTarget, &clearColor);
+    auto sampledCubeDesc = cubeDesc;
+    sampledCubeDesc.DepthOrArraySize = FaceCount;
+
+    cubeMap = GTexture(device, sampledCubeDesc, L"DynamicCubeMap", TextureUsage::RenderTarget, &clearColor);
+
+    for (UINT i = 0; i < FaceCount; ++i)
+    {
+        cubeMaps[i] = GTexture(device, cubeDesc,
+                               L"DynamicCubeMapFace" + std::to_wstring(i),
+                               TextureUsage::RenderTarget, &clearColor);
+    }
 
     D3D12_RESOURCE_DESC depthDesc{};
     depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -126,17 +181,15 @@ void CubeMapRenderTarget::BuildResources()
 
 void CubeMapRenderTarget::BuildDescriptors()
 {
-    for (UINT i = 0; i < 6; ++i)
+    for (UINT i = 0; i < FaceCount; ++i)
     {
         D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
         rtvDesc.Format = format;
-        rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
-        rtvDesc.Texture2DArray.MipSlice = 0;
-        rtvDesc.Texture2DArray.PlaneSlice = 0;
-        rtvDesc.Texture2DArray.FirstArraySlice = i;
-        rtvDesc.Texture2DArray.ArraySize = 1;
+        rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+        rtvDesc.Texture2D.MipSlice = 0;
+        rtvDesc.Texture2D.PlaneSlice = 0;
 
-        cubeMap.CreateRenderTargetView(&rtvDesc, &rtvMemory, i);
+        cubeMaps[i].CreateRenderTargetView(&rtvDesc, &rtvMemory[i], 0);
     }
 
     D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};

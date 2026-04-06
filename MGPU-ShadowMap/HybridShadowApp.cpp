@@ -312,7 +312,7 @@ void HybridShadowApp::InitSRVMemoryAndMaterials()
         srvTexturesMemory.push_back(
             devices[i]->AllocateDescriptors(
                 D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-                assets[i].GetTextures().size() + (i == GraphicAdapterPrimary ? 1 : 0)));
+                assets[i].GetTextures().size() + (i == GraphicAdapterPrimary ? CubeMapRenderTarget::FaceCount : 0)));
 
         auto materials = assets[i].GetMaterials();
 
@@ -353,13 +353,11 @@ void HybridShadowApp::InitRenderPaths()
     shadowPathPrimeDevice = (std::make_shared<ShadowMap>(devices[GraphicAdapterPrimary], 2048, 2048));
 
     shadowPathSecondDevice = (std::make_shared<ShadowMap>(devices[GraphicAdapterSecond], 2048, 2048));
-
     auto shadowMapDesc = shadowPathSecondDevice->GetTexture().GetD3D12ResourceDesc();
 
     crossAdapterShadowMap = std::make_shared<GCrossAdapterResource>(shadowMapDesc, devices[GraphicAdapterPrimary],
                                                                     devices[GraphicAdapterSecond],
                                                                     L"Shared Shadow Map");
-
     primeCopyShadowMapSRV = devices[GraphicAdapterPrimary]->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -378,6 +376,46 @@ void HybridShadowApp::InitRenderPaths()
 
     dynamicCubeMap = std::make_shared<CubeMapRenderTarget>(
         devices[GraphicAdapterPrimary], DynamicCubeMapSize, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT);
+
+    dynamicCubeMapSecond = std::make_shared<CubeMapRenderTarget>(
+       devices[GraphicAdapterSecond], DynamicCubeMapSize, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT);
+    
+    auto cubeMapDesc1 = dynamicCubeMapSecond->GetCubeMap(0).GetD3D12ResourceDesc();
+    auto cubeMapDesc2 = dynamicCubeMapSecond->GetCubeMap(1).GetD3D12ResourceDesc();
+    auto cubeMapDesc3 = dynamicCubeMapSecond->GetCubeMap(2).GetD3D12ResourceDesc();
+    auto cubeMapDesc4 = dynamicCubeMapSecond->GetCubeMap(3).GetD3D12ResourceDesc();
+    auto cubeMapDesc5 = dynamicCubeMapSecond->GetCubeMap(4).GetD3D12ResourceDesc();
+    auto cubeMapDesc6 = dynamicCubeMapSecond->GetCubeMap(5).GetD3D12ResourceDesc();
+
+    // cubeMapDesc.DepthOrArraySize = 1;
+    crossAdapterCubeMap1 = std::make_shared<GCrossAdapterResource>(cubeMapDesc1, devices[GraphicAdapterPrimary],
+                                                                devices[GraphicAdapterSecond],
+                                                                L"Shared Cube Map");
+    crossAdapterCubeMap2 = std::make_shared<GCrossAdapterResource>(cubeMapDesc2, devices[GraphicAdapterPrimary],
+                                                                devices[GraphicAdapterSecond],
+                                                                L"Shared Cube Map");
+    crossAdapterCubeMap3 = std::make_shared<GCrossAdapterResource>(cubeMapDesc3, devices[GraphicAdapterPrimary],
+                                                                devices[GraphicAdapterSecond],
+                                                                L"Shared Cube Map");
+    crossAdapterCubeMap4 = std::make_shared<GCrossAdapterResource>(cubeMapDesc4, devices[GraphicAdapterPrimary],
+                                                                devices[GraphicAdapterSecond],
+                                                                L"Shared Cube Map");
+    crossAdapterCubeMap5 = std::make_shared<GCrossAdapterResource>(cubeMapDesc5, devices[GraphicAdapterPrimary],
+                                                                devices[GraphicAdapterSecond],
+                                                                L"Shared Cube Map");
+    crossAdapterCubeMap6 = std::make_shared<GCrossAdapterResource>(cubeMapDesc6, devices[GraphicAdapterPrimary],
+                                                                devices[GraphicAdapterSecond],
+                                                                L"Shared Cube Map");
+    primeCopyCubeMapSRV = devices[GraphicAdapterPrimary]->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    
+    primeCopyCubeMap1 = GTexture(devices[GraphicAdapterPrimary], dynamicCubeMapSecond->GetCubeMap(0).GetD3D12ResourceDesc());
+    primeCopyCubeMap2 = GTexture(devices[GraphicAdapterPrimary], dynamicCubeMapSecond->GetCubeMap(1).GetD3D12ResourceDesc());
+    primeCopyCubeMap3 = GTexture(devices[GraphicAdapterPrimary], dynamicCubeMapSecond->GetCubeMap(2).GetD3D12ResourceDesc());
+    primeCopyCubeMap4 = GTexture(devices[GraphicAdapterPrimary], dynamicCubeMapSecond->GetCubeMap(3).GetD3D12ResourceDesc());
+    primeCopyCubeMap5 = GTexture(devices[GraphicAdapterPrimary], dynamicCubeMapSecond->GetCubeMap(4).GetD3D12ResourceDesc());
+    primeCopyCubeMap6 = GTexture(devices[GraphicAdapterPrimary], dynamicCubeMapSecond->GetCubeMap(5).GetD3D12ResourceDesc());
+
+
 }
 
 void HybridShadowApp::LoadStudyTexture()
@@ -1267,7 +1305,7 @@ void HybridShadowApp::UpdateSsaoCB(const GameTimer& gt)
 
 void HybridShadowApp::PopulateShadowMapCommands(const GraphicsAdapter adapter, std::shared_ptr<GCommandList> cmdList)
 {
-    if (UseOnlyPrime)
+    if (true)
     {
         cmdList->SetRootSignature(*primeDeviceSignature.get());
         cmdList->SetRootShaderResourceView(StandardShaderSlot::MaterialData,
@@ -1557,7 +1595,7 @@ void HybridShadowApp::Draw(const GameTimer& gt)
     {
         PopulateShadowMapCommands(GraphicAdapterPrimary, primeCmdList);
     }
-    PopulateDynamicCubeMapCommands(primeCmdList);
+    PopulateDynamicCubeMapCommands(GraphicAdapterPrimary,primeCmdList);
     PopulateForwardPathCommands(primeCmdList);
     PopulateDrawQuadCommand(primeCmdList, MainWindow->GetCurrentBackBuffer(),
                             &currentFrameResource->BackBufferRTVMemory, 0);
@@ -1867,68 +1905,155 @@ std::array<PassConstants, HybridShadowApp::DynamicCubeMapFaceCount> HybridShadow
     return out;
 }
 
-void HybridShadowApp::PopulateDynamicCubeMapCommands(const std::shared_ptr<GCommandList>& cmdList)
+void HybridShadowApp::PopulateDynamicCubeMapCommands(const GraphicsAdapter adapter, const std::shared_ptr<GCommandList>& cmdList)
 {
-    if (dynamicCubeMap == nullptr) return;
-    if (mirrorSphereTransform == nullptr) return;
-
-    Vector3 center = mirrorSphereTransform->GetWorldPosition();
-
-    cmdList->SetDescriptorsHeap(&srvTexturesMemory[GraphicAdapterPrimary]);
-    cmdList->SetRootSignature(*primeDeviceSignature.get());
-
-    cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(), D3D12_RESOURCE_STATE_RENDER_TARGET);
-    cmdList->TransitionBarrier(dynamicCubeMap->GetDepthMap(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
-    cmdList->FlushResourceBarriers();
-
-    auto vp = dynamicCubeMap->GetViewport();
-    auto rect = dynamicCubeMap->GetScissorRect();
-    cmdList->SetViewports(&vp, 1);
-    cmdList->SetScissorRects(&rect, 1);
-
-    cmdList->SetRootShaderResourceView(StandardShaderSlot::MaterialData,
-                                       *currentFrameResource->MaterialBuffers[GraphicAdapterPrimary]);
-    cmdList->SetRootDescriptorTable(StandardShaderSlot::TexturesMap, &srvTexturesMemory[GraphicAdapterPrimary]);
-    cmdList->SetRootDescriptorTable(StandardShaderSlot::ShadowMap,
-                                    UseOnlyPrime ? shadowPathPrimeDevice->GetSrv() : &primeCopyShadowMapSRV);
-
-    auto whiteSsao = assets[GraphicAdapterPrimary].GetTextureIndex(L"white1x1Tex");
-    cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap,
-                                    &srvTexturesMemory[GraphicAdapterPrimary],
-                                    whiteSsao);
-    cmdList->SetRootDescriptorTable(StandardShaderSlot::SkyMap,
-                                    &srvTexturesMemory[GraphicAdapterPrimary],
-                                    skyCubeMapTexIndex);
-
-    auto cubePasses = BuildCubeFacePassCBs(center);
-
-    for (UINT face = 0; face < DynamicCubeMapFaceCount; ++face)
+    if (UseOnlyPrime)
     {
-        UINT passIndex = DynamicCubeMapFirstPassIndex + face;
-        currentFrameResource->PrimePassConstantUploadBuffer->CopyData(passIndex, cubePasses[face]);
-        cmdList->SetRootConstantBufferView(StandardShaderSlot::CameraData,
-                                           *currentFrameResource->PrimePassConstantUploadBuffer,
-                                           passIndex);
+        if (dynamicCubeMap == nullptr) return;
+        if (mirrorSphereTransform == nullptr) return;
 
-        cmdList->ClearRenderTarget(dynamicCubeMap->GetRTV(), face, Colors::Black);
-        cmdList->ClearDepthStencil(dynamicCubeMap->GetDSV(), 0,
-                                   D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0);
-        cmdList->SetRenderTargets(1, dynamicCubeMap->GetRTV(), face, dynamicCubeMap->GetDSV());
+        Vector3 center = mirrorSphereTransform->GetWorldPosition();
 
-        cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::SkyBox));
-        PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::SkyBox);
+        cmdList->SetDescriptorsHeap(&srvTexturesMemory[GraphicAdapterPrimary]);
+        cmdList->SetRootSignature(*primeDeviceSignature.get());
 
-        cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Opaque));
-        PopulateDrawCommandsExcept(GraphicAdapterPrimary, cmdList, RenderMode::Opaque, mirrorSphereRenderer.get());
+        for (UINT face = 0; face < CubeMapRenderTarget::FaceCount; ++face)
+        {
+            cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(face), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        }
+        cmdList->TransitionBarrier(dynamicCubeMap->GetDepthMap(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        cmdList->FlushResourceBarriers();
 
-        cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::OpaqueAlphaDrop));
-        PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::OpaqueAlphaDrop);
+        auto vp = dynamicCubeMap->GetViewport();
+        auto rect = dynamicCubeMap->GetScissorRect();
+        cmdList->SetViewports(&vp, 1);
+        cmdList->SetScissorRects(&rect, 1);
 
-        cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Transparent));
-        PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::Transparent);
+        cmdList->SetRootShaderResourceView(StandardShaderSlot::MaterialData,
+                                           *currentFrameResource->MaterialBuffers[GraphicAdapterPrimary]);
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::TexturesMap, &srvTexturesMemory[GraphicAdapterPrimary]);
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::ShadowMap,
+                                        UseOnlyPrime ? shadowPathPrimeDevice->GetSrv() : &primeCopyShadowMapSRV);
+
+        auto whiteSsao = assets[GraphicAdapterPrimary].GetTextureIndex(L"white1x1Tex");
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap,
+                                        &srvTexturesMemory[GraphicAdapterPrimary],
+                                        whiteSsao);
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::SkyMap,
+                                        &srvTexturesMemory[GraphicAdapterPrimary],
+                                        skyCubeMapTexIndex);
+
+        auto cubePasses = BuildCubeFacePassCBs(center);
+
+        for (UINT face = 0; face < DynamicCubeMapFaceCount; ++face)
+        {
+            UINT passIndex = DynamicCubeMapFirstPassIndex + face;
+            currentFrameResource->PrimePassConstantUploadBuffer->CopyData(passIndex, cubePasses[face]);
+            cmdList->SetRootConstantBufferView(StandardShaderSlot::CameraData,
+                                               *currentFrameResource->PrimePassConstantUploadBuffer,
+                                               passIndex);
+
+            cmdList->ClearRenderTarget(dynamicCubeMap->GetRTV(face), 0, Colors::Black);
+            cmdList->ClearDepthStencil(dynamicCubeMap->GetDSV(), 0,
+                                       D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0);
+            cmdList->SetRenderTargets(1, dynamicCubeMap->GetRTV(face), 0, dynamicCubeMap->GetDSV());
+
+            cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::SkyBox));
+            PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::SkyBox);
+
+            cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Opaque));
+            PopulateDrawCommandsExcept(GraphicAdapterPrimary, cmdList, RenderMode::Opaque, mirrorSphereRenderer.get());
+
+            cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::OpaqueAlphaDrop));
+            PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::OpaqueAlphaDrop);
+
+            cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Transparent));
+            PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::Transparent);
+        }
+
+        dynamicCubeMap->CopyToCubeMap(cmdList);
+        cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(), D3D12_RESOURCE_STATE_GENERIC_READ);
+        for (UINT face = 0; face < CubeMapRenderTarget::FaceCount; ++face)
+        {
+            cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(face), D3D12_RESOURCE_STATE_GENERIC_READ);
+        }
+        cmdList->FlushResourceBarriers();
     }
-
-    cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(), D3D12_RESOURCE_STATE_GENERIC_READ);
-    cmdList->FlushResourceBarriers();
+    else
+    {
+        
+        if (adapter == GraphicAdapterPrimary)
+        {
+            cmdList->CopyResource(primeCopyCubeMap1, crossAdapterCubeMap1->GetPrimeResource());
+            cmdList->CopyResource(primeCopyCubeMap2, crossAdapterCubeMap2->GetPrimeResource());
+            cmdList->CopyResource(primeCopyCubeMap3, crossAdapterCubeMap3->GetPrimeResource());
+            cmdList->CopyResource(primeCopyCubeMap4, crossAdapterCubeMap4->GetPrimeResource());
+            cmdList->CopyResource(primeCopyCubeMap5, crossAdapterCubeMap5->GetPrimeResource());
+            cmdList->CopyResource(primeCopyCubeMap6, crossAdapterCubeMap6->GetPrimeResource());
+    
+    
+        }
+    else
+    {
+        Vector3 center = mirrorSphereTransform->GetWorldPosition();
+    
+        cmdList->SetDescriptorsHeap(&srvTexturesMemory[GraphicAdapterSecond]);
+        cmdList->SetRootSignature(*secondDeviceShadowMapSignature.get());
+        
+        cmdList->TransitionBarrier(dynamicCubeMapSecond->GetCubeMap(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        cmdList->TransitionBarrier(dynamicCubeMapSecond->GetDepthMap(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        cmdList->FlushResourceBarriers();
+        
+        auto vp = dynamicCubeMapSecond->GetViewport();
+        auto rect = dynamicCubeMapSecond->GetScissorRect();
+        cmdList->SetViewports(&vp, 1);
+        cmdList->SetScissorRects(&rect, 1);
+    
+        cmdList->SetRootShaderResourceView(StandardShaderSlot::MaterialData,
+                                           *currentFrameResource->MaterialBuffers[GraphicAdapterSecond]);
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::TexturesMap, &srvTexturesMemory[GraphicAdapterSecond]);
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::ShadowMap,
+                                        UseOnlyPrime ? shadowPathPrimeDevice->GetSrv() : &primeCopyShadowMapSRV);
+    
+        auto whiteSsao = assets[GraphicAdapterPrimary].GetTextureIndex(L"white1x1Tex");
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap,
+                                        &srvTexturesMemory[GraphicAdapterSecond],
+                                        whiteSsao);
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::SkyMap,
+                                        &srvTexturesMemory[GraphicAdapterSecond],
+                                        skyCubeMapTexIndex);
+        
+        auto cubePasses = BuildCubeFacePassCBs(center);
+    
+        for (UINT face = 0; face < DynamicCubeMapFaceCount; ++face)
+        {
+            UINT passIndex = DynamicCubeMapFirstPassIndex + face;
+            currentFrameResource->PrimePassConstantUploadBuffer->CopyData(passIndex, cubePasses[face]);
+            cmdList->SetRootConstantBufferView(StandardShaderSlot::CameraData,
+                                               *currentFrameResource->PrimePassConstantUploadBuffer,
+                                               passIndex);
+    
+            cmdList->ClearRenderTarget(dynamicCubeMapSecond->GetRTV(face), face, Colors::Black);
+            cmdList->ClearDepthStencil(dynamicCubeMapSecond->GetDSV(), 0,
+                                       D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0);
+            cmdList->SetRenderTargets(1, dynamicCubeMapSecond->GetRTV(face), face, dynamicCubeMapSecond->GetDSV());
+    
+            cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::SkyBox));
+            PopulateDrawCommands(GraphicAdapterSecond, cmdList, RenderMode::SkyBox);
+    
+            cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Opaque));
+            PopulateDrawCommandsExcept(GraphicAdapterSecond, cmdList, RenderMode::Opaque, mirrorSphereRenderer.get());
+    
+            cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::OpaqueAlphaDrop));
+            PopulateDrawCommands(GraphicAdapterSecond, cmdList, RenderMode::OpaqueAlphaDrop);
+    
+            cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Transparent));
+            PopulateDrawCommands(GraphicAdapterSecond, cmdList, RenderMode::Transparent);
+        }
+    
+        cmdList->TransitionBarrier(dynamicCubeMapSecond->GetCubeMap(), D3D12_RESOURCE_STATE_GENERIC_READ);
+        cmdList->FlushResourceBarriers();
+    }
+    
+    }
 }
-

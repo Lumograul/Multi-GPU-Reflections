@@ -111,11 +111,27 @@ private:
 
     std::shared_ptr<GraphicPSO> shadowMapPSOSecondDevice;
     std::shared_ptr<GCrossAdapterResource> crossAdapterShadowMap;
+    std::shared_ptr<GCrossAdapterResource> crossAdapterCubeMap1;
+    std::shared_ptr<GCrossAdapterResource> crossAdapterCubeMap2;
+    std::shared_ptr<GCrossAdapterResource> crossAdapterCubeMap3;
+    std::shared_ptr<GCrossAdapterResource> crossAdapterCubeMap4;
+    std::shared_ptr<GCrossAdapterResource> crossAdapterCubeMap5;
+    std::shared_ptr<GCrossAdapterResource> crossAdapterCubeMap6;
+
     GTexture primeCopyShadowMap;
     GDescriptor primeCopyShadowMapSRV;
     std::shared_ptr<ShadowMap> shadowPathSecondDevice;
+    std::shared_ptr<ShadowMap> cubeMapSecondDevice;
 
     std::shared_ptr<ShadowMap> shadowPathPrimeDevice;
+    std::shared_ptr<ShadowMap> cubeMapPrimeDevice;
+    GTexture primeCopyCubeMap1;
+    GTexture primeCopyCubeMap2;
+    GTexture primeCopyCubeMap3;
+    GTexture primeCopyCubeMap4;
+    GTexture primeCopyCubeMap5;
+    GTexture primeCopyCubeMap6;
+    GDescriptor primeCopyCubeMapSRV;
 
 
     std::vector<D3D12_INPUT_ELEMENT_DESC> defaultInputLayout{};
@@ -157,6 +173,8 @@ private:
     static constexpr UINT DynamicCubeMapSize = 1024;
 
     std::shared_ptr<CubeMapRenderTarget> dynamicCubeMap = nullptr;
+    std::shared_ptr<CubeMapRenderTarget> dynamicCubeMapSecond = nullptr;
+
     UINT dynamicCubeMapSrvIndex = 0;
     UINT skyCubeMapTexIndex = 0;
 
@@ -178,7 +196,7 @@ private:
     UINT pathMapShow = 0;
     //off, shadowMap, ssaoMap
     const UINT maxPathMap = 3;
-    void inline PopulateDynamicCubeMapCommands(const std::shared_ptr<GCommandList>& cmdList);
+    void inline PopulateDynamicCubeMapCommands(const GraphicsAdapter adapter, const std::shared_ptr<GCommandList>& cmdList);
     std::array<PassConstants, DynamicCubeMapFaceCount> inline BuildCubeFacePassCBs(const Vector3& center) const;
     void inline PopulateDrawCommandsExcept(GraphicsAdapter adapterIndex, const std::shared_ptr<GCommandList>& cmdList,
                                            RenderMode type, const Renderer* excluded);

@@ -585,7 +585,7 @@ void HybridUIApp::CreateMaterials()
 
 void HybridUIApp::InitSRVMemoryAndMaterials()
 {
-    srvTexturesMemory = primeDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, assets->GetTextures().size() + 1);
+    srvTexturesMemory = primeDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, assets->GetTextures().size() + CubeMapRenderTarget::FaceCount);
 
     auto materials = assets->GetMaterials();
 
@@ -1691,7 +1691,10 @@ LRESULT HybridUIApp::MsgProc(const HWND hwnd, const UINT msg, const WPARAM wPara
 
         cmdList->SetDescriptorsHeap(&srvTexturesMemory);
 
-        cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        for (UINT face = 0; face < CubeMapRenderTarget::FaceCount; ++face)
+        {
+            cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(face), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        }
         cmdList->TransitionBarrier(dynamicCubeMap->GetDepthMap(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
         cmdList->FlushResourceBarriers();
 
@@ -1718,10 +1721,10 @@ LRESULT HybridUIApp::MsgProc(const HWND hwnd, const UINT msg, const WPARAM wPara
 
             cmdList->SetRootConstantBufferView(StandardShaderSlot::CameraData, *currentFrameResource->PrimePassConstantUploadBuffer, passIndex);
 
-            cmdList->ClearRenderTarget(dynamicCubeMap->GetRTV(), face, Colors::Black);
+            cmdList->ClearRenderTarget(dynamicCubeMap->GetRTV(face), 0, Colors::Black);
             cmdList->ClearDepthStencil(dynamicCubeMap->GetDSV(), 0, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0);
 
-            cmdList->SetRenderTargets(1, dynamicCubeMap->GetRTV(), face, dynamicCubeMap->GetDSV());
+            cmdList->SetRenderTargets(1, dynamicCubeMap->GetRTV(face), 0, dynamicCubeMap->GetDSV());
 
             cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::SkyBox));
             PopulateDrawCommands(cmdList, RenderMode::SkyBox);
@@ -1743,6 +1746,11 @@ LRESULT HybridUIApp::MsgProc(const HWND hwnd, const UINT msg, const WPARAM wPara
             PopulateDrawCommands(cmdList, RenderMode::Transparent);
         }
 
+        dynamicCubeMap->CopyToCubeMap(cmdList);
         cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(), D3D12_RESOURCE_STATE_GENERIC_READ);
+        for (UINT face = 0; face < CubeMapRenderTarget::FaceCount; ++face)
+        {
+            cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(face), D3D12_RESOURCE_STATE_GENERIC_READ);
+        }
         cmdList->FlushResourceBarriers();
     }
