@@ -43,7 +43,7 @@ protected:
     void inline UpdateShadowPassCB(const GameTimer& gt);
     void inline UpdateMainPassCB(const GameTimer& gt);
     void inline UpdateSsaoCB(const GameTimer& gt);
-    void inline PopulateShadowMapCommands(GraphicsAdapter adapter, std::shared_ptr<GCommandList> cmdList);
+    void inline PopulateShadowMapCommands(/*GraphicsAdapter adapter, */std::shared_ptr<GCommandList> cmdList);
     void inline PopulateNormalMapCommands(const std::shared_ptr<GCommandList>& cmdList);
     void inline PopulateAmbientMapCommands(const std::shared_ptr<GCommandList>& cmdList);
     void inline PopulateForwardPathCommands(const std::shared_ptr<GCommandList>& cmdList);
