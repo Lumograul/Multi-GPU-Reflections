@@ -48,7 +48,7 @@ void HybridShadowApp::InitDevices()
 {
     devices.resize(GraphicAdapterCount);
 
-    auto allDevices = GDeviceFactory::GetAllDevices(false);
+    auto allDevices = GDeviceFactory::GetAllDevices(true);
 
     const auto firstDevice = allDevices[0];
     const auto otherDevice = allDevices[1];
@@ -272,7 +272,7 @@ void HybridShadowApp::InitPipeLineResource()
 
 void HybridShadowApp::CreateMaterials()
 {
-    for (int i = 0; i < GraphicAdapterCount; ++i)
+    //for (int i = 0; i < GraphicAdapterCount; ++i)
     {
         auto seamless = std::make_shared<Material>(L"seamless", RenderMode::Opaque);
         seamless->FresnelR0 = Vector3(0.02f, 0.02f, 0.02f);
