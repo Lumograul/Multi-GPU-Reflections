@@ -88,7 +88,7 @@ private:
     LockThreadQueue<std::wstring> logQueue{};
     bool finishTest = false;
 
-    std::atomic<bool> UseOnlyPrime = false;
+    std::atomic<bool> UseOnlyPrime = true;
     UINT multi = 1;
 
     D3D12_VIEWPORT fullViewport{};
