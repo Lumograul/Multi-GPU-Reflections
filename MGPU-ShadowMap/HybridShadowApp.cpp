@@ -48,7 +48,7 @@ void HybridShadowApp::InitDevices()
 {
     devices.resize(GraphicAdapterCount);
 
-    auto allDevices = GDeviceFactory::GetAllDevices(true);
+    auto allDevices = GDeviceFactory::GetAllDevices(false);
 
     const auto firstDevice = allDevices[0];
     const auto otherDevice = allDevices[1];
@@ -272,36 +272,36 @@ void HybridShadowApp::InitPipeLineResource()
 
 void HybridShadowApp::CreateMaterials()
 {
-    //for (int i = 0; i < GraphicAdapterCount; ++i)
+    for (int i = 0; i < GraphicAdapterCount; ++i)
     {
         auto seamless = std::make_shared<Material>(L"seamless", RenderMode::Opaque);
         seamless->FresnelR0 = Vector3(0.02f, 0.02f, 0.02f);
         seamless->Roughness = 0.1f;
 
-        auto tex = assets[i].GetTextureIndex(L"seamless");
-        seamless->SetDiffuseTexture(assets[i].GetTexture(tex), tex);
+        auto tex = assets[GraphicAdapterPrimary].GetTextureIndex(L"seamless");
+        seamless->SetDiffuseTexture(assets[GraphicAdapterPrimary].GetTexture(tex), tex);
 
-        tex = assets[i].GetTextureIndex(L"defaultNormalMap");
+        tex = assets[GraphicAdapterPrimary].GetTextureIndex(L"defaultNormalMap");
 
-        seamless->SetNormalMap(assets[i].GetTexture(tex), tex);
-        assets[i].AddMaterial(seamless);
+        seamless->SetNormalMap(assets[GraphicAdapterPrimary].GetTexture(tex), tex);
+        assets[GraphicAdapterPrimary].AddMaterial(seamless);
         
-        models[i][L"quad"]->SetMeshMaterial(
-            0, assets[i].GetMaterial(assets[i].GetMaterialIndex(L"seamless")));
+        models[GraphicAdapterPrimary][L"quad"]->SetMeshMaterial(
+            0, assets[GraphicAdapterPrimary].GetMaterial(assets[GraphicAdapterPrimary].GetMaterialIndex(L"seamless")));
 
         auto mirror = std::make_shared<Material>(L"mirror", RenderMode::Reflection);
         mirror->FresnelR0 = Vector3(0.98f, 0.98f, 0.98f);
         mirror->Roughness = 0.02f;
 
-        auto white = assets[i].GetTextureIndex(L"seamless");
-        mirror->SetDiffuseTexture(assets[i].GetTexture(white), white);
+        auto white = assets[GraphicAdapterPrimary].GetTextureIndex(L"seamless");
+        mirror->SetDiffuseTexture(assets[GraphicAdapterPrimary].GetTexture(white), white);
 
-        auto nrm = assets[i].GetTextureIndex(L"defaultNormalMap");
-        mirror->SetNormalMap(assets[i].GetTexture(nrm), nrm);
-        assets[i].AddMaterial(mirror);
+        auto nrm = assets[GraphicAdapterPrimary].GetTextureIndex(L"defaultNormalMap");
+        mirror->SetNormalMap(assets[GraphicAdapterPrimary].GetTexture(nrm), nrm);
+        assets[GraphicAdapterPrimary].AddMaterial(mirror);
         
-        models[i][L"mirrorSphere"]->SetMeshMaterial(
-            0, assets[i].GetMaterial(assets[i].GetMaterialIndex(L"mirror")));
+        models[GraphicAdapterPrimary][L"mirrorSphere"]->SetMeshMaterial(
+            0, assets[GraphicAdapterPrimary].GetMaterial(assets[GraphicAdapterPrimary].GetMaterialIndex(L"mirror")));
     }
 
 
@@ -997,8 +997,8 @@ bool HybridShadowApp::Initialize()
     Flush();
     CreateMaterials();
     Flush();
-    DublicateResource();
-    Flush();
+    //DublicateResource();
+    //Flush();
     MipMasGenerate();
     Flush();
     InitRenderPaths();
