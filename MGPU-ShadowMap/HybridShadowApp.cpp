@@ -997,8 +997,8 @@ bool HybridShadowApp::Initialize()
     Flush();
     CreateMaterials();
     Flush();
-    //DublicateResource();
-    //Flush();
+    DublicateResource();
+    Flush();
     MipMasGenerate();
     Flush();
     InitRenderPaths();
