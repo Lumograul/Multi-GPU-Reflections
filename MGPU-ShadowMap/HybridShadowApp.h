@@ -62,7 +62,7 @@ protected:
     bool InitMainWindow() override;;
 
 private:
-    void Flush() override;;
+    void Flush() override;
     void inline InitDevices();
     void inline InitFrameResource();
     void inline InitRootSignature();
@@ -88,7 +88,7 @@ private:
     LockThreadQueue<std::wstring> logQueue{};
     bool finishTest = false;
 
-    std::atomic<bool> UseOnlyPrime = true;
+    std::atomic<bool> UseOnlyPrime = false;
     UINT multi = 1;
 
     D3D12_VIEWPORT fullViewport{};
@@ -105,17 +105,24 @@ private:
 
     std::shared_ptr<GRootSignature> primeDeviceSignature;
     std::shared_ptr<GRootSignature> ssaoPrimeRootSignature;
-    std::shared_ptr<GRootSignature> secondDeviceShadowMapSignature;
+    std::shared_ptr<GRootSignature> ssaoSecondRootSignature;
+    std::shared_ptr<GRootSignature> secondDeviceSignature;
 
-    RenderModeFactory defaultPrimePipelineResources;
+    RenderModeFactory primePipelineResources;
+    RenderModeFactory secondPipelineResources;
 
     std::shared_ptr<GraphicPSO> shadowMapPSOSecondDevice;
     std::shared_ptr<GCrossAdapterResource> crossAdapterShadowMap;
+    std::array<std::shared_ptr<GCrossAdapterResource>, 6> crossAdapterCubeMaps;
+
     GTexture primeCopyShadowMap;
     GDescriptor primeCopyShadowMapSRV;
     std::shared_ptr<ShadowMap> shadowPathSecondDevice;
+    std::shared_ptr<ShadowMap> cubeMapSecondDevice;
 
     std::shared_ptr<ShadowMap> shadowPathPrimeDevice;
+    std::shared_ptr<ShadowMap> cubeMapPrimeDevice;
+    GDescriptor primeCopyCubeMapSRV;
 
 
     std::vector<D3D12_INPUT_ELEMENT_DESC> defaultInputLayout{};
@@ -157,8 +164,7 @@ private:
     static constexpr UINT DynamicCubeMapSize = 1024;
 
     std::shared_ptr<CubeMapRenderTarget> dynamicCubeMap = nullptr;
-    UINT dynamicCubeMapSrvIndex = 0;
-    UINT skyCubeMapTexIndex = 0;
+    std::shared_ptr<CubeMapRenderTarget> dynamicCubeMapSecond = nullptr;
 
     std::shared_ptr<Renderer> mirrorSphereRenderer = nullptr;
     std::shared_ptr<Transform> mirrorSphereTransform = nullptr;
@@ -178,9 +184,7 @@ private:
     UINT pathMapShow = 0;
     //off, shadowMap, ssaoMap
     const UINT maxPathMap = 3;
-    void inline PopulateDynamicCubeMapCommands(const std::shared_ptr<GCommandList>& cmdList);
+    void inline PopulateDynamicCubeMapCommands(GraphicsAdapter adapter, const std::shared_ptr<GCommandList>& cmdList);
     std::array<PassConstants, DynamicCubeMapFaceCount> inline BuildCubeFacePassCBs(const Vector3& center) const;
-    void inline PopulateDrawCommandsExcept(GraphicsAdapter adapterIndex, const std::shared_ptr<GCommandList>& cmdList,
-                                           RenderMode type, const Renderer* excluded);
     LRESULT MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) override;
 };

@@ -112,8 +112,8 @@ void Material::Update()
         matConstants.DiffuseMapIndex = DiffuseMapIndex;
         matConstants.NormalMapIndex = NormalMapIndex;
 
-        matConstants.MatPad1 = EnableEnvReflection;
-        matConstants.MatPad2 = 0;
+        /*matConstants.MatPad1 = EnableEnvReflection;
+        matConstants.MatPad2 = 0;*/
 
         NumFramesDirty--;
     }

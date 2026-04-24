@@ -207,6 +207,9 @@
         <None Include="Shaders\TreeSprite.hlsl">
             <FileType>Document</FileType>
         </None>
+        <None Include="Shaders\Reflections.hlsl">
+            <FileType>Document</FileType>
+        </None>
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="$(SolutionDir)\Common\Common.vcxproj">

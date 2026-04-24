@@ -4,27 +4,27 @@
 #include "GDevice.h"
 #include "GDescriptor.h"
 
-FrameResource::FrameResource(std::shared_ptr<GDevice> primeDevices, std::shared_ptr<GDevice> secondDevice,
+FrameResource::FrameResource(std::shared_ptr<GDevice> primeDevice, std::shared_ptr<GDevice> secondDevice,
                              UINT passCount, UINT materialCount)
 {
     PrimePassConstantUploadBuffer = (std::make_shared<ConstantUploadBuffer<PassConstants>>(
-        primeDevices, passCount + 1, primeDevices->GetName() + L" Forward Path Data"));
+        primeDevice, passCount + 1, primeDevice->GetName() + L" Forward Path Data"));
 
-    ShadowPassConstantUploadBuffer = (std::make_shared<ConstantUploadBuffer<PassConstants>>(
+    SecondPassConstantUploadBuffer = (std::make_shared<ConstantUploadBuffer<PassConstants>>(
         secondDevice, passCount, secondDevice->GetName() + L" Forward Path Data"));
 
     SsaoConstantUploadBuffer = (std::make_shared<ConstantUploadBuffer<SsaoConstants>>(
-        primeDevices, 1, primeDevices->GetName() + L" SSAO Path Data"));
+        primeDevice, 1, primeDevice->GetName() + L" SSAO Path Data"));
 
     MaterialBuffers.push_back(
-        std::make_shared<StructuredUploadBuffer<MaterialConstants>>(primeDevices, materialCount,
-                                                                    primeDevices->GetName() + L" Materials Data"));
+        std::make_shared<StructuredUploadBuffer<MaterialConstants>>(primeDevice, materialCount,
+                                                                    primeDevice->GetName() + L" Materials Data"));
 
     MaterialBuffers.push_back(
         std::make_shared<StructuredUploadBuffer<MaterialConstants>>(secondDevice, materialCount,
                                                                     secondDevice->GetName() + L" Materials Data"));
 
-    BackBufferRTVMemory = (primeDevices->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
+    BackBufferRTVMemory = (primeDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
 }
 
 FrameResource::~FrameResource()

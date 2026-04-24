@@ -1,6 +1,9 @@
 #pragma once
 
+#include <array>
+
 #include "d3dUtil.h"
+#include "GCommandList.h"
 #include "GDescriptor.h"
 #include "GTexture.h"
 
@@ -12,27 +15,28 @@ using namespace Utils;
 class CubeMapRenderTarget
 {
 public:
+    static constexpr UINT FaceCount = 6;
+
     CubeMapRenderTarget(const std::shared_ptr<GDevice>& device, UINT size, DXGI_FORMAT format, DXGI_FORMAT depthFormat);
 
     void OnResize(UINT newSize);
-    void BuildSRV(GDescriptor* srvHeap, UINT srvIndex);
 
     UINT GetSize() const;
 
     GTexture& GetCubeMap();
     GTexture& GetDepthMap();
 
-    GDescriptor* GetRTV();
+    GDescriptor GetRTV(UINT faceIndex) const;
     GDescriptor* GetDSV();
+    GDescriptor* GetSRV();
 
     const D3D12_VIEWPORT& GetViewport() const;
     const D3D12_RECT& GetScissorRect() const;
 
-    UINT GetSrvIndex() const;
-
 private:
+    
     void BuildResources();
-    void BuildDescriptors();
+    void BuildDescriptors() const;
 
     std::shared_ptr<GDevice> device;
 
@@ -45,9 +49,8 @@ private:
 
     GDescriptor rtvMemory;
     GDescriptor dsvMemory;
+    GDescriptor srvMemory;
 
     D3D12_VIEWPORT viewport{};
     D3D12_RECT scissorRect{};
-
-    UINT srvIndex = UINT_MAX;
 };
