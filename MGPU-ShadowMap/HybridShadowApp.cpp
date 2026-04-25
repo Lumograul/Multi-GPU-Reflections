@@ -272,39 +272,35 @@ void HybridShadowApp::InitPipeLineResource()
 
 void HybridShadowApp::CreateMaterials()
 {
-    //for (int i = 0; i < GraphicAdapterCount; ++i)
-    {
-        auto seamless = std::make_shared<Material>(L"seamless", RenderMode::Opaque);
-        seamless->FresnelR0 = Vector3(0.02f, 0.02f, 0.02f);
-        seamless->Roughness = 0.1f;
+    auto seamless = std::make_shared<Material>(L"seamless", RenderMode::Opaque);
+    seamless->FresnelR0 = Vector3(0.02f, 0.02f, 0.02f);
+    seamless->Roughness = 0.1f;
 
-        auto tex = assets[GraphicAdapterPrimary].GetTextureIndex(L"seamless");
-        seamless->SetDiffuseTexture(assets[GraphicAdapterPrimary].GetTexture(tex), tex);
+    auto tex = assets[GraphicAdapterPrimary].GetTextureIndex(L"seamless");
+    seamless->SetDiffuseTexture(assets[GraphicAdapterPrimary].GetTexture(tex), tex);
 
-        tex = assets[GraphicAdapterPrimary].GetTextureIndex(L"defaultNormalMap");
+    tex = assets[GraphicAdapterPrimary].GetTextureIndex(L"defaultNormalMap");
 
-        seamless->SetNormalMap(assets[GraphicAdapterPrimary].GetTexture(tex), tex);
-        assets[GraphicAdapterPrimary].AddMaterial(seamless);
+    seamless->SetNormalMap(assets[GraphicAdapterPrimary].GetTexture(tex), tex);
+    assets[GraphicAdapterPrimary].AddMaterial(seamless);
         
-        models[GraphicAdapterPrimary][L"quad"]->SetMeshMaterial(
-            0, assets[GraphicAdapterPrimary].GetMaterial(assets[GraphicAdapterPrimary].GetMaterialIndex(L"seamless")));
+    models[GraphicAdapterPrimary][L"quad"]->SetMeshMaterial(
+        0, assets[GraphicAdapterPrimary].GetMaterial(assets[GraphicAdapterPrimary].GetMaterialIndex(L"seamless")));
 
-        auto mirror = std::make_shared<Material>(L"mirror", RenderMode::Reflection);
-        mirror->FresnelR0 = Vector3(0.98f, 0.98f, 0.98f);
-        mirror->Roughness = 0.02f;
+    auto mirror = std::make_shared<Material>(L"mirror", RenderMode::Reflection);
+    mirror->FresnelR0 = Vector3(0.98f, 0.98f, 0.98f);
+    mirror->Roughness = 0.02f;
 
-        auto white = assets[GraphicAdapterPrimary].GetTextureIndex(L"seamless");
-        mirror->SetDiffuseTexture(assets[GraphicAdapterPrimary].GetTexture(white), white);
+    auto white = assets[GraphicAdapterPrimary].GetTextureIndex(L"seamless");
+    mirror->SetDiffuseTexture(assets[GraphicAdapterPrimary].GetTexture(white), white);
 
-        auto nrm = assets[GraphicAdapterPrimary].GetTextureIndex(L"defaultNormalMap");
-        mirror->SetNormalMap(assets[GraphicAdapterPrimary].GetTexture(nrm), nrm);
-        assets[GraphicAdapterPrimary].AddMaterial(mirror);
+    auto nrm = assets[GraphicAdapterPrimary].GetTextureIndex(L"defaultNormalMap");
+    mirror->SetNormalMap(assets[GraphicAdapterPrimary].GetTexture(nrm), nrm);
+    assets[GraphicAdapterPrimary].AddMaterial(mirror);
         
-        models[GraphicAdapterPrimary][L"mirrorSphere"]->SetMeshMaterial(
-            0, assets[GraphicAdapterPrimary].GetMaterial(assets[GraphicAdapterPrimary].GetMaterialIndex(L"mirror")));
-    }
-
-
+    models[GraphicAdapterPrimary][L"mirrorSphere"]->SetMeshMaterial(
+        0, assets[GraphicAdapterPrimary].GetMaterial(assets[GraphicAdapterPrimary].GetMaterialIndex(L"mirror")));
+    
     logQueue.Push(std::wstring(L"\nCreate Materials"));
 }
 
@@ -397,140 +393,142 @@ void HybridShadowApp::InitRenderPaths()
 
 void HybridShadowApp::LoadStudyTexture()
 {
-    for (int i = 0; i < GraphicAdapterCount; ++i)
+    auto queue = devices[GraphicAdapterPrimary]->GetCommandQueue(GQueueType::Compute);
+
+    auto cmdList = queue->GetCommandList();
+
+    auto bricksTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\bricks2.dds", cmdList);
+    bricksTex->SetName(L"bricksTex");
+    assets[GraphicAdapterPrimary].AddTexture(bricksTex);
+
+    auto stoneTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\stone.dds", cmdList);
+    stoneTex->SetName(L"stoneTex");
+    assets[GraphicAdapterPrimary].AddTexture(stoneTex);
+
+    auto tileTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\tile.dds", cmdList);
+    tileTex->SetName(L"tileTex");
+    assets[GraphicAdapterPrimary].AddTexture(tileTex);
+
+    auto fenceTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\WireFence.dds", cmdList);
+    fenceTex->SetName(L"fenceTex");
+    assets[GraphicAdapterPrimary].AddTexture(fenceTex);
+
+    auto waterTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\water1.dds", cmdList);
+    waterTex->SetName(L"waterTex");
+    assets[GraphicAdapterPrimary].AddTexture(waterTex);
+
+    auto skyTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\skymap.dds", cmdList);
+    skyTex->SetName(L"skyTex");
+    assets[GraphicAdapterPrimary].AddTexture(skyTex);
+
+    auto grassTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\grass.dds", cmdList);
+    grassTex->SetName(L"grassTex");
+    assets[GraphicAdapterPrimary].AddTexture(grassTex);
+
+    auto treeArrayTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\treeArray2.dds", cmdList);
+    treeArrayTex->SetName(L"treeArrayTex");
+    assets[GraphicAdapterPrimary].AddTexture(treeArrayTex);
+
+    auto seamless = GTexture::LoadTextureFromFile(L"Data\\Textures\\seamless_grass.jpg", cmdList);
+    seamless->SetName(L"seamless");
+    assets[GraphicAdapterPrimary].AddTexture(seamless);
+
+    auto white1x1 = GTexture::LoadTextureFromFile(L"Data\\Textures\\white1x1.dds", cmdList);
+    white1x1->SetName(L"white1x1Tex");
+    assets[GraphicAdapterPrimary].AddTexture(white1x1);
+
+
+    std::vector<std::wstring> texNormalNames =
     {
-        auto queue = devices[i]->GetCommandQueue(GQueueType::Compute);
+        L"bricksNormalMap",
+        L"tileNormalMap",
+        L"defaultNormalMap"
+    };
 
-        auto cmdList = queue->GetCommandList();
+    std::vector<std::wstring> texNormalFilenames =
+    {
+        L"Data\\Textures\\bricks2_nmap.dds",
+        L"Data\\Textures\\tile_nmap.dds",
+        L"Data\\Textures\\default_nmap.dds"
+    };
 
-        auto bricksTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\bricks2.dds", cmdList);
-        bricksTex->SetName(L"bricksTex");
-        assets[i].AddTexture(bricksTex);
-
-        auto stoneTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\stone.dds", cmdList);
-        stoneTex->SetName(L"stoneTex");
-        assets[i].AddTexture(stoneTex);
-
-        auto tileTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\tile.dds", cmdList);
-        tileTex->SetName(L"tileTex");
-        assets[i].AddTexture(tileTex);
-
-        auto fenceTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\WireFence.dds", cmdList);
-        fenceTex->SetName(L"fenceTex");
-        assets[i].AddTexture(fenceTex);
-
-        auto waterTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\water1.dds", cmdList);
-        waterTex->SetName(L"waterTex");
-        assets[i].AddTexture(waterTex);
-
-        auto skyTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\skymap.dds", cmdList);
-        skyTex->SetName(L"skyTex");
-        assets[i].AddTexture(skyTex);
-
-        auto grassTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\grass.dds", cmdList);
-        grassTex->SetName(L"grassTex");
-        assets[i].AddTexture(grassTex);
-
-        auto treeArrayTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\treeArray2.dds", cmdList);
-        treeArrayTex->SetName(L"treeArrayTex");
-        assets[i].AddTexture(treeArrayTex);
-
-        auto seamless = GTexture::LoadTextureFromFile(L"Data\\Textures\\seamless_grass.jpg", cmdList);
-        seamless->SetName(L"seamless");
-        assets[i].AddTexture(seamless);
-
-        auto white1x1 = GTexture::LoadTextureFromFile(L"Data\\Textures\\white1x1.dds", cmdList);
-        white1x1->SetName(L"white1x1Tex");
-        assets[i].AddTexture(white1x1);
-
-
-        std::vector<std::wstring> texNormalNames =
-        {
-            L"bricksNormalMap",
-            L"tileNormalMap",
-            L"defaultNormalMap"
-        };
-
-        std::vector<std::wstring> texNormalFilenames =
-        {
-            L"Data\\Textures\\bricks2_nmap.dds",
-            L"Data\\Textures\\tile_nmap.dds",
-            L"Data\\Textures\\default_nmap.dds"
-        };
-
-        for (int j = 0; j < texNormalNames.size(); ++j)
-        {
-            auto texture = GTexture::LoadTextureFromFile(texNormalFilenames[j], cmdList, TextureUsage::Normalmap);
-            texture->SetName(texNormalNames[j]);
-            assets[i].AddTexture(texture);
-        }
-
-        queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
+    for (int j = 0; j < texNormalNames.size(); ++j)
+    {
+        auto texture = GTexture::LoadTextureFromFile(texNormalFilenames[j], cmdList, TextureUsage::Normalmap);
+        texture->SetName(texNormalNames[j]);
+        assets[GraphicAdapterPrimary].AddTexture(texture);
     }
+
+    queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
+
 
     logQueue.Push(std::wstring(L"\nLoad DDS Texture"));
 }
 
 void HybridShadowApp::LoadModels()
 {
-    for (int i = 0; i < GraphicAdapterCount; ++i)
-    {
-        auto queue = devices[i]->GetCommandQueue(GQueueType::Compute);
+    
+        auto queue = devices[GraphicAdapterPrimary]->GetCommandQueue(GQueueType::Compute);
         auto cmdList = queue->GetCommandList();
 
-        auto nano = assets[i].CreateModelFromFile(cmdList, "Data\\Objects\\Nanosuit\\Nanosuit.obj");
-        models[i][L"nano"] = std::move(nano);
+        auto nano = assets[GraphicAdapterPrimary].CreateModelFromFile(
+            cmdList, "Data\\Objects\\Nanosuit\\Nanosuit.obj");
+        models[GraphicAdapterPrimary][L"nano"] = std::move(nano);
 
-        auto atlas = assets[i].CreateModelFromFile(cmdList, "Data\\Objects\\Atlas\\Atlas.obj");
-        models[i][L"atlas"] = std::move(atlas);
-        auto pbody = assets[i].CreateModelFromFile(cmdList, "Data\\Objects\\P-Body\\P-Body.obj");
-        models[i][L"pbody"] = std::move(pbody);
+        auto atlas = assets[GraphicAdapterPrimary].CreateModelFromFile(
+            cmdList, "Data\\Objects\\Atlas\\Atlas.obj");
+        models[GraphicAdapterPrimary][L"atlas"] = std::move(atlas);
+        auto pbody = assets[GraphicAdapterPrimary].CreateModelFromFile(
+            cmdList, "Data\\Objects\\P-Body\\P-Body.obj");
+        models[GraphicAdapterPrimary][L"pbody"] = std::move(pbody);
 
-        auto griffon = assets[i].CreateModelFromFile(cmdList, "Data\\Objects\\Griffon\\Griffon.FBX");
+        auto griffon = assets[GraphicAdapterPrimary].CreateModelFromFile(
+            cmdList, "Data\\Objects\\Griffon\\Griffon.FBX");
         griffon->scaleMatrix = Matrix::CreateScale(0.1);
-        models[i][L"griffon"] = std::move(griffon);
+        models[GraphicAdapterPrimary][L"griffon"] = std::move(griffon);
 
-        auto mountDragon = assets[i].CreateModelFromFile(
+        auto mountDragon = assets[GraphicAdapterPrimary].CreateModelFromFile(
             cmdList, "Data\\Objects\\MOUNTAIN_DRAGON\\MOUNTAIN_DRAGON.FBX");
         mountDragon->scaleMatrix = Matrix::CreateScale(0.1);
-        models[i][L"mountDragon"] = std::move(mountDragon);
+        models[GraphicAdapterPrimary][L"mountDragon"] = std::move(mountDragon);
 
-        auto desertDragon = assets[i].CreateModelFromFile(
+        auto desertDragon = assets[GraphicAdapterPrimary].CreateModelFromFile(
             cmdList, "Data\\Objects\\DesertDragon\\DesertDragon.FBX");
         desertDragon->scaleMatrix = Matrix::CreateScale(0.1);
-        models[i][L"desertDragon"] = std::move(desertDragon);
+        models[GraphicAdapterPrimary][L"desertDragon"] = std::move(desertDragon);
 
-        auto sphere = assets[i].GenerateSphere(cmdList);
-        models[i][L"sphere"] = std::move(sphere);
-        models[i][L"mirrorSphere"] = assets[i].GenerateSphere(cmdList);
+        auto sphere = assets[GraphicAdapterPrimary].GenerateSphere(cmdList);
+        models[GraphicAdapterPrimary][L"sphere"] = std::move(sphere);
+        models[GraphicAdapterPrimary][L"mirrorSphere"] = assets[GraphicAdapterPrimary].GenerateSphere(cmdList);
 
-        auto quad = assets[i].GenerateQuad(cmdList);
-        models[i][L"quad"] = std::move(quad);
+        auto quad = assets[GraphicAdapterPrimary].GenerateQuad(cmdList);
+        models[GraphicAdapterPrimary][L"quad"] = std::move(quad);
 
-        auto stair = assets[i].CreateModelFromFile(
+        auto stair = assets[GraphicAdapterPrimary].CreateModelFromFile(
             cmdList, "Data\\Objects\\Temple\\SM_AsianCastle_A.FBX");
-        models[i][L"stair"] = std::move(stair);
+        models[GraphicAdapterPrimary][L"stair"] = std::move(stair);
 
-        auto columns = assets[i].CreateModelFromFile(
+        auto columns = assets[GraphicAdapterPrimary].CreateModelFromFile(
             cmdList, "Data\\Objects\\Temple\\SM_AsianCastle_E.FBX");
-        models[i][L"columns"] = std::move(columns);
+        models[GraphicAdapterPrimary][L"columns"] = std::move(columns);
 
-        auto fountain = assets[i].
+        auto fountain = assets[GraphicAdapterPrimary].
             CreateModelFromFile(cmdList, "Data\\Objects\\Temple\\SM_Fountain.FBX");
-        models[i][L"fountain"] = std::move(fountain);
+        models[GraphicAdapterPrimary][L"fountain"] = std::move(fountain);
 
-        auto platform = assets[i].CreateModelFromFile(
+        auto platform = assets[GraphicAdapterPrimary].CreateModelFromFile(
             cmdList, "Data\\Objects\\Temple\\SM_PlatformSquare.FBX");
-        models[i][L"platform"] = std::move(platform);
+        models[GraphicAdapterPrimary][L"platform"] = std::move(platform);
 
-        auto doom = assets[i].CreateModelFromFile(cmdList, "Data\\Objects\\DoomSlayer\\doommarine.obj");
-        models[i][L"doom"] = std::move(doom);
+        auto doom = assets[GraphicAdapterPrimary].CreateModelFromFile(
+            cmdList, "Data\\Objects\\DoomSlayer\\doommarine.obj");
+        models[GraphicAdapterPrimary][L"doom"] = std::move(doom);
 
         queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
         queue->Flush();
 
         logQueue.Push(std::wstring(L"\nLoad Models Data"));
-    }
+    
 }
 
 void HybridShadowApp::MipMasGenerate()
@@ -599,17 +597,66 @@ void HybridShadowApp::DublicateResource()
         try
         {
             auto queue = devices[i]->GetCommandQueue(GQueueType::Compute);
-            const auto cmdList = queue->GetCommandList();
-
-
+            auto cmdList = queue->GetCommandList();
+            
             logQueue.Push(std::wstring(L"\nGet CmdList For " + devices[i]->GetName()));
+
+            for (auto&& texture : assets[GraphicAdapterPrimary].GetTextures())
+            {
+                texture->ClearTrack();
+
+                auto tex = GTexture::LoadTextureFromFile(texture->GetFilePath(), cmdList);
+                tex->SetName(texture->GetName());
+                tex->ClearTrack();
+
+                assets[i].AddTexture(std::move(tex));
+
+                logQueue.Push(std::wstring(L"\nLoad Texture " + texture->GetName() + L" for " + devices[i]->GetName()));
+            }
+
+            logQueue.Push(std::wstring(L"\nDublicate texture Resource for " + devices[i]->GetName()));
+
+            for (auto&& material : assets[GraphicAdapterPrimary].GetMaterials())
+            {
+                auto copy = std::make_shared<Material>(material->GetName(), material->GetPSO());
+
+                copy->SetMaterialIndex(material->GetMaterialIndex());
+
+                auto index = assets[i].GetTextureIndex(material->GetDiffuseTexture()->GetName());
+                auto texture = assets[i].GetTexture(index);
+                copy->SetDiffuseTexture(texture, index);
+
+                index = assets[i].GetTextureIndex(material->GetNormalTexture()->GetName());
+                texture = assets[i].GetTexture(index);
+                copy->SetNormalMap(texture, index);
+
+                copy->DiffuseAlbedo = material->DiffuseAlbedo;
+                copy->FresnelR0 = material->FresnelR0;
+                copy->Roughness = material->Roughness;
+                copy->MatTransform = material->MatTransform;
+
+                assets[i].AddMaterial(std::move(copy));
+            }
+            logQueue.Push(std::wstring(L"\nDublicate material Resource for " + devices[i]->GetName()));
 
             for (auto&& model : models[GraphicAdapterPrimary])
             {
                 auto modelCopy = model.second->Dublicate(cmdList);
 
+                for (int j = 0; j < model.second->GetMeshesCount(); ++j)
+                {
+                    auto originMaterial = model.second->GetMeshMaterial(j);
+
+                    if (originMaterial != nullptr)
+                        modelCopy->SetMeshMaterial(
+                            j, assets[i].GetMaterial(assets[i].GetMaterialIndex(originMaterial->GetName())));
+                }
+
                 models[i][model.first] = std::move(modelCopy);
             }
+
+            logQueue.Push(std::wstring(L"\nDublicate models Resource for " + devices[i]->GetName()));
+
             queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
 
             logQueue.Push(std::wstring(L"\nDublicate Resource for " + devices[i]->GetName()));
@@ -663,7 +710,7 @@ void HybridShadowApp::AddMultiDeviceOpaqueRenderComponent(GameObject* object, co
 void HybridShadowApp::CreateGO()
 {
     
-    {
+    
         logQueue.Push(std::wstring(L"\nStart Create GO"));
         auto skySphere = std::make_unique<GameObject>("Sky");
         skySphere->GetTransform()->SetScale({500, 500, 500});
@@ -681,7 +728,7 @@ void HybridShadowApp::CreateGO()
             typedRenderer[i][static_cast<int>(RenderMode::SkyBox)].push_back((renderer));
         }
         gameObjects.push_back(std::move(skySphere));
-    }
+    
 
     auto mirrorSphere = std::make_unique<GameObject>("MirrorSphere");
     mirrorSphere->GetTransform()->SetPosition(Vector3(0.0f, 20.0f, 0.0f));
@@ -697,18 +744,15 @@ void HybridShadowApp::CreateGO()
     gameObjects.push_back(std::move(mirrorSphere));
 
     
-    {
+    
         auto quadRitem = std::make_unique<GameObject>("Quad");
-        for (int i = 0; i < GraphicAdapterCount; ++i)
-        {
-            auto renderer = std::make_shared<ModelRenderer>(devices[i],
-                                                            models[i][L"quad"]);
-            renderer->SetModel(models[i][L"quad"]);
-            quadRitem->AddComponent(renderer);
-            typedRenderer[i][static_cast<int>(RenderMode::Debug)].push_back(renderer);
-            typedRenderer[i][static_cast<int>(RenderMode::Quad)].push_back(renderer);
-        }
-        gameObjects.push_back(std::move(quadRitem));
+    auto renderer = std::make_shared<ModelRenderer>(devices[GraphicAdapterPrimary],
+                                        models[GraphicAdapterPrimary][L"quad"]);
+    renderer->SetModel(models[GraphicAdapterPrimary][L"quad"]);
+    quadRitem->AddComponent(renderer);
+    typedRenderer[GraphicAdapterPrimary][static_cast<int>(RenderMode::Debug)].push_back(renderer);
+    typedRenderer[GraphicAdapterPrimary][static_cast<int>(RenderMode::Quad)].push_back(renderer);
+    gameObjects.push_back(std::move(quadRitem));
 
         auto sun1 = std::make_unique<GameObject>("Directional Light");
         auto light = std::make_shared<Light>(Directional);
@@ -717,25 +761,23 @@ void HybridShadowApp::CreateGO()
         sun1->AddComponent(light);
         gameObjects.push_back(std::move(sun1));
 
-        for (int i = 0; i < GraphicAdapterCount; ++i)
-        {
-            auto orbitNano = std::make_unique<GameObject>("OrbitNano");
-            orbitNano->SetScale(0.5f);
-            auto orbitRenderer = std::make_shared<ModelRenderer>(devices[i],
-                                                                 models[i][L"nano"]);
+    
+    auto orbitNano = std::make_unique<GameObject>("OrbitNano");
+    orbitNano->SetScale(0.5f);
+    AddMultiDeviceOpaqueRenderComponent(orbitNano.get(), L"nano");
+    
+    //auto orbitRenderer = std::make_shared<ModelRenderer>(devices[GraphicAdapterPrimary],
+    //                                                     models[GraphicAdapterPrimary][L"nano"]);
+    //typedRenderer[GraphicAdapterPrimary][static_cast<int>(RenderMode::Opaque)].push_back(orbitRenderer);
 
-            orbitNano->AddComponent(orbitRenderer);
-            typedRenderer[i][static_cast<int>(RenderMode::Opaque)].push_back(orbitRenderer);
-
-            auto orbit = std::make_shared<Orbiter>(
-                mirrorSphereTransform,
-                Vector3(5.0f, -5.0f, 0.0f),
-                0.8f,
-                Vector3(0.0f, 90.0f, 0.0f));
-            orbitNano->AddComponent(orbit);
-            gameObjects.push_back(std::move(orbitNano));
-        }
-    }
+    auto orbit = std::make_shared<Orbiter>(
+        mirrorSphereTransform,
+        Vector3(5.0f, -5.0f, 0.0f),
+        0.8f,
+        Vector3(0.0f, 90.0f, 0.0f));
+    orbitNano->AddComponent(orbit);
+    gameObjects.push_back(std::move(orbitNano));
+    
     for (int j = 0; j < 11; ++j)
     {
         auto nano = std::make_unique<GameObject>();
@@ -782,7 +824,7 @@ void HybridShadowApp::CreateGO()
     rotater->GetTransform()->SetParent(platform->GetTransform().get());
     rotater->GetTransform()->SetPosition(Vector3::Forward * 325 + Vector3::Left * 625);
     rotater->GetTransform()->SetEulerRotate(Vector3(0, -90, 90));
-    rotater->AddComponent(std::make_shared<Rotater>(10));
+    //rotater->AddComponent(std::make_shared<Rotater>(10)); // comment to disable auto camera rotation
 
     auto camera = std::make_unique<GameObject>("MainCamera");
     camera->GetTransform()->SetParent(rotater->GetTransform().get());
@@ -991,7 +1033,7 @@ bool HybridShadowApp::Initialize()
     InitDevices();
     InitMainWindow();
 
-    LoadStudyTexture(); 
+    LoadStudyTexture();
     Flush();
     LoadModels();
     Flush();
