@@ -11,7 +11,7 @@ CubeMapRenderTarget::CubeMapRenderTarget(const std::shared_ptr<GDevice>& device,
 
     rtvMemory = device->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, FaceCount);
     dsvMemory = this->device->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1);
-    srvMemory = this->device->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, CubeMapRenderTarget::FaceCount);
+    srvMemory = this->device->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, FaceCount);
     BuildResources();
     BuildDescriptors();
 }
@@ -130,9 +130,7 @@ void CubeMapRenderTarget::BuildDescriptors() const
         rtvDesc.Texture2D.MipSlice = 0;
         rtvDesc.Texture2D.PlaneSlice = 0;
         
-        // Render target to ith element.
         rtvDesc.Texture2DArray.FirstArraySlice = i;
-        // Only view one element of the array.
         rtvDesc.Texture2DArray.ArraySize = 1;
 
         cubeMap.CreateRenderTargetView(&rtvDesc, &rtvMemory, i);
