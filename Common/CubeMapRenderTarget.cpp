@@ -5,7 +5,8 @@ CubeMapRenderTarget::CubeMapRenderTarget(const std::shared_ptr<GDevice>& device,
                                         UINT size, DXGI_FORMAT format, DXGI_FORMAT depthFormat)
     : device(device), size(size), format(format), depthFormat(depthFormat)
 {
-    viewport = { 0.0f, 0.0f, static_cast<float>(size), static_cast<float>(size), 0.0f, 1.0f };
+    viewport = { 0.0f, 0.0f, static_cast<float>(size), 
+        static_cast<float>(size), 0.0f, 1.0f };
     scissorRect = { 0, 0, static_cast<int>(size), static_cast<int>(size) };
 
     rtvMemory = device->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, FaceCount);
