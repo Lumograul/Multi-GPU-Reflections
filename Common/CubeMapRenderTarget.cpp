@@ -22,8 +22,10 @@ void CubeMapRenderTarget::OnResize(UINT newSize)
 
     size = newSize;
 
-    viewport = { 0.0f, 0.0f, static_cast<float>(size), static_cast<float>(size), 0.0f, 1.0f };
-    scissorRect = { 0, 0, static_cast<int>(size), static_cast<int>(size) };
+    viewport = { 0.0f, 0.0f, static_cast<float>(size), 
+        static_cast<float>(size), 0.0f, 1.0f };
+    scissorRect = { 0, 0, static_cast<int>(size), 
+        static_cast<int>(size) };
 
     BuildResources();
     BuildDescriptors();
