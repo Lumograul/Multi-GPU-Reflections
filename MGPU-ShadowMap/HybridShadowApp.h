@@ -3,6 +3,7 @@
 #include <array>
 
 #include "AssetsLoader.h"
+#include "BakedCubeMapRenderTarget.h"
 #include "d3dApp.h"
 #include "GDeviceFactory.h"
 #include "GModel.h"
@@ -49,8 +50,8 @@ protected:
     void inline PopulateForwardPathCommands(const std::shared_ptr<GCommandList>& cmdList);
     void inline PopulateDrawCommands(GraphicsAdapter adapterIndex, const std::shared_ptr<GCommandList>& cmdList,
                                      RenderMode type);
-    void inline PopulateDrawQuadCommand(const std::shared_ptr<GCommandList>& cmdList, GTexture& renderTarget,
-                                        GDescriptor* rtvMemory, UINT
+    void inline PopulateDrawQuadCommand(const std::shared_ptr<GCommandList>& cmdList, const GTexture& renderTarget,
+                                        const GDescriptor* rtvMemory, UINT
                                         offsetRTV);
     void inline PopulateCopyResource(const std::shared_ptr<GCommandList>& cmdList, const GResource& srcResource,
                                      const GResource& dstResource);
@@ -115,8 +116,6 @@ private:
     std::shared_ptr<GCrossAdapterResource> crossAdapterShadowMap;
     std::array<std::shared_ptr<GCrossAdapterResource>, 6> crossAdapterCubeMaps;
 
-    GTexture primeCopyShadowMap;
-    GDescriptor primeCopyShadowMapSRV;
     std::shared_ptr<ShadowMap> shadowPathSecondDevice;
     std::shared_ptr<ShadowMap> cubeMapSecondDevice;
 
@@ -159,12 +158,30 @@ private:
     Matrix mLightProj = Matrix::Identity;
     Matrix mShadowTransform = Matrix::Identity;
 
+    // new
     static constexpr UINT DynamicCubeMapFaceCount = 6;
     static constexpr UINT DynamicCubeMapFirstPassIndex = 2;
     static constexpr UINT DynamicCubeMapSize = 1024;
 
     std::shared_ptr<CubeMapRenderTarget> dynamicCubeMap = nullptr;
     std::shared_ptr<CubeMapRenderTarget> dynamicCubeMapSecond = nullptr;
+    
+    std::shared_ptr<BakedCubeMapRenderTarget> bakedCubeMapSecond = nullptr;
+    std::atomic<bool> isBaked = false;
+    static constexpr UINT BakedCubeMapFaceCount = 6;
+    static constexpr UINT BakedCubeMapFirstPassIndex = 2;
+    static constexpr UINT BakedCubeMapSize = 1024;
+    
+    GTexture dynamicCubeMapFaceColor; //= nullptr;
+    GTexture dynamicCubeMapFaceDepth; //= nullptr;
+    
+    GDescriptor dynamicCubeMapFaceSrv;
+    GDescriptor dynamicCubeMapFaceRtv;
+    GDescriptor dynamicCubeMapFaceDsv;
+    
+    void CreateDynamicTextures(const GraphicsAdapter adapter);
+    
+    // end of new
 
     std::shared_ptr<Renderer> mirrorSphereRenderer = nullptr;
     std::shared_ptr<Transform> mirrorSphereTransform = nullptr;
