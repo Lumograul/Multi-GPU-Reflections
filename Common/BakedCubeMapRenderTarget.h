@@ -12,12 +12,12 @@ using namespace Graphics;
 using namespace Allocator;
 using namespace Utils;
 
-class CubeMapRenderTarget
+class BakedCubeMapRenderTarget
 {
 public:
     static constexpr UINT FaceCount = 6;
 
-    CubeMapRenderTarget(const std::shared_ptr<GDevice>& device, UINT size, DXGI_FORMAT format, DXGI_FORMAT depthFormat);
+    BakedCubeMapRenderTarget(const std::shared_ptr<GDevice>& device, UINT size, DXGI_FORMAT format, DXGI_FORMAT depthFormat);
 
     void OnResize(UINT newSize);
 
@@ -27,17 +27,17 @@ public:
     GTexture& GetDepthMap();
 
     GDescriptor GetRTV(UINT faceIndex) const;
-    GDescriptor* GetDSV();
+    GDescriptor GetDSV(UINT faceIndex) const;
     GDescriptor* GetSRV();
 
     const D3D12_VIEWPORT& GetViewport() const;
     const D3D12_RECT& GetScissorRect() const;
 
-private:
+protected:
+    virtual void BuildResources();
+    virtual void BuildDescriptors() const;
     
-    void BuildResources();
-    void BuildDescriptors() const;
-
+private:
     std::shared_ptr<GDevice> device;
 
     UINT size = 0;

@@ -567,11 +567,11 @@ void HybridUIApp::CreateMaterials()
 
     mirror->EnableEnvReflection = 1;
 
-    // diffuse = белый 1x1 (чтобы не было "травы")
+    // diffuse = пїЅпїЅпїЅпїЅпїЅ 1x1 (пїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅ "пїЅпїЅпїЅпїЅпїЅ")
     auto white = assets->GetTextureIndex(L"seamless");
     mirror->SetDiffuseTexture(assets->GetTexture(white), white);
 
-    // нормаль можно оставить defaultNormalMap
+    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ defaultNormalMap
     auto nrm = assets->GetTextureIndex(L"defaultNormalMap");
     mirror->SetNormalMap(assets->GetTexture(nrm), nrm);
 
@@ -585,7 +585,7 @@ void HybridUIApp::CreateMaterials()
 
 void HybridUIApp::InitSRVMemoryAndMaterials()
 {
-    srvTexturesMemory = primeDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, assets->GetTextures().size() + 1);
+    srvTexturesMemory = primeDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, assets->GetTextures().size());
 
     auto materials = assets->GetMaterials();
 
@@ -595,8 +595,6 @@ void HybridUIApp::InitSRVMemoryAndMaterials()
 
         material->InitMaterial(&srvTexturesMemory);
     }
-    dynamicCubeMapSrvIndex = static_cast<UINT>(assets->GetTextures().size());
-    dynamicCubeMap->BuildSRV(&srvTexturesMemory, dynamicCubeMapSrvIndex);
 
     logQueue.Push(std::wstring(L"\nInit Views for " + primeDevice->GetName()));
     ambientPrimePath->BuildDescriptors();
@@ -1718,10 +1716,10 @@ LRESULT HybridUIApp::MsgProc(const HWND hwnd, const UINT msg, const WPARAM wPara
 
             cmdList->SetRootConstantBufferView(StandardShaderSlot::CameraData, *currentFrameResource->PrimePassConstantUploadBuffer, passIndex);
 
-            cmdList->ClearRenderTarget(dynamicCubeMap->GetRTV(), face, Colors::Black);
+            cmdList->ClearRenderTarget(&dynamicCubeMap->GetRTV(face), 0, Colors::Black);
             cmdList->ClearDepthStencil(dynamicCubeMap->GetDSV(), 0, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0);
 
-            cmdList->SetRenderTargets(1, dynamicCubeMap->GetRTV(), face, dynamicCubeMap->GetDSV());
+            cmdList->SetRenderTargets(1, &dynamicCubeMap->GetRTV(face), 0, dynamicCubeMap->GetDSV());
 
             cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::SkyBox));
             PopulateDrawCommands(cmdList, RenderMode::SkyBox);
@@ -1742,7 +1740,7 @@ LRESULT HybridUIApp::MsgProc(const HWND hwnd, const UINT msg, const WPARAM wPara
             cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Transparent));
             PopulateDrawCommands(cmdList, RenderMode::Transparent);
         }
-
+        cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(), D3D12_RESOURCE_STATE_GENERIC_READ);
         cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(), D3D12_RESOURCE_STATE_GENERIC_READ);
         cmdList->FlushResourceBarriers();
     }

@@ -23,7 +23,7 @@ namespace PEPEngine::Graphics
 
             ComPtr<ID3D12Debug1> spDebugController1;
             ThrowIfFailed(debugController->QueryInterface(IID_PPV_ARGS(&spDebugController1)));
-            //spDebugController1->SetEnableGPUBasedValidation(true);
+            spDebugController1->SetEnableGPUBasedValidation(false);
         }
 #endif
 

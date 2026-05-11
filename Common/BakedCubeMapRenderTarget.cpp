@@ -1,78 +1,75 @@
 #include "pch.h"
-#include "CubeMapRenderTarget.h"
+#include "BakedCubeMapRenderTarget.h"
 
-CubeMapRenderTarget::CubeMapRenderTarget(const std::shared_ptr<GDevice>& device, 
+BakedCubeMapRenderTarget::BakedCubeMapRenderTarget(const std::shared_ptr<GDevice>& device, 
                                         UINT size, DXGI_FORMAT format, DXGI_FORMAT depthFormat)
     : device(device), size(size), format(format), depthFormat(depthFormat)
 {
-    viewport = { 0.0f, 0.0f, static_cast<float>(size), 
-        static_cast<float>(size), 0.0f, 1.0f };
+    viewport = { 0.0f, 0.0f, static_cast<float>(size), static_cast<float>(size), 0.0f, 1.0f };
     scissorRect = { 0, 0, static_cast<int>(size), static_cast<int>(size) };
 
-    rtvMemory = device->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, FaceCount);
-    dsvMemory = this->device->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1);
+    rtvMemory = this->device->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, FaceCount);
+    dsvMemory = this->device->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, FaceCount);
     srvMemory = this->device->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, FaceCount);
     BuildResources();
     BuildDescriptors();
 }
 
-void CubeMapRenderTarget::OnResize(UINT newSize)
+void BakedCubeMapRenderTarget::OnResize(UINT newSize)
 {
     if (size == newSize) return;
 
     size = newSize;
 
-    viewport = { 0.0f, 0.0f, static_cast<float>(size), 
-        static_cast<float>(size), 0.0f, 1.0f };
-    scissorRect = { 0, 0, static_cast<int>(size), 
-        static_cast<int>(size) };
+    viewport = { 0.0f, 0.0f, static_cast<float>(size), static_cast<float>(size), 0.0f, 1.0f };
+    scissorRect = { 0, 0, static_cast<int>(size), static_cast<int>(size) };
 
     BuildResources();
     BuildDescriptors();
 }
 
-UINT CubeMapRenderTarget::GetSize() const
+UINT BakedCubeMapRenderTarget::GetSize() const
 {
     return size;
 }
 
-GTexture& CubeMapRenderTarget::GetCubeMap()
+GTexture& BakedCubeMapRenderTarget::GetCubeMap()
 {
     return cubeMap;
 }
 
-GTexture& CubeMapRenderTarget::GetDepthMap()
+GTexture& BakedCubeMapRenderTarget::GetDepthMap()
 {
     return depthMap;
 }
 
-GDescriptor CubeMapRenderTarget::GetRTV(UINT faceIndex) const
+GDescriptor BakedCubeMapRenderTarget::GetRTV(UINT faceIndex) const
 {
     return rtvMemory.Offset(faceIndex);
 }
 
-GDescriptor* CubeMapRenderTarget::GetDSV()
+GDescriptor BakedCubeMapRenderTarget::GetDSV(UINT faceIndex) const
 {
-    return &dsvMemory;
+    return dsvMemory.Offset(faceIndex);
 }
 
-GDescriptor* CubeMapRenderTarget::GetSRV()
+GDescriptor* BakedCubeMapRenderTarget::GetSRV()
 {
     return &srvMemory;
 }
 
-const D3D12_VIEWPORT& CubeMapRenderTarget::GetViewport() const
+const D3D12_VIEWPORT& BakedCubeMapRenderTarget::GetViewport() const
 {
     return viewport;
 }
 
-const D3D12_RECT& CubeMapRenderTarget::GetScissorRect() const
+const D3D12_RECT& BakedCubeMapRenderTarget::GetScissorRect() const
 {
     return scissorRect;
 }
 
 
-void CubeMapRenderTarget::BuildResources()
+void BakedCubeMapRenderTarget::BuildResources()
 {
     D3D12_RESOURCE_DESC cubeDesc{};
     cubeDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -90,14 +87,14 @@ void CubeMapRenderTarget::BuildResources()
     constexpr float clear[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     const CD3DX12_CLEAR_VALUE clearColor(format, clear);
 
-    cubeMap = GTexture(device, cubeDesc, L"DynamicCubeMap", TextureUsage::RenderTarget, &clearColor);
+    cubeMap = GTexture(device, cubeDesc, L"BakedCubeMap", TextureUsage::RenderTarget, &clearColor);
 
     D3D12_RESOURCE_DESC depthDesc{};
     depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     depthDesc.Alignment = 0;
     depthDesc.Width = size;
     depthDesc.Height = size;
-    depthDesc.DepthOrArraySize = 1;
+    depthDesc.DepthOrArraySize = FaceCount;
     depthDesc.MipLevels = 1;
     depthDesc.Format = depthFormat;
     depthDesc.SampleDesc.Count = 1;
@@ -110,10 +107,10 @@ void CubeMapRenderTarget::BuildResources()
     clearDepth.DepthStencil.Depth = 1.0f;
     clearDepth.DepthStencil.Stencil = 0;
 
-    depthMap = GTexture(device, depthDesc, L"DynamicCubeDepth", TextureUsage::Depth, &clearDepth);
+    depthMap = GTexture(device, depthDesc, L"BakedCubeMapDepth", TextureUsage::Depth, &clearDepth);
 }
 
-void CubeMapRenderTarget::BuildDescriptors() const
+void BakedCubeMapRenderTarget::BuildDescriptors() const
 {
     D3D12_SHADER_RESOURCE_VIEW_DESC cubeSrvDesc{};
     cubeSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -132,16 +129,26 @@ void CubeMapRenderTarget::BuildDescriptors() const
         rtvDesc.Texture2D.MipSlice = 0;
         rtvDesc.Texture2D.PlaneSlice = 0;
         
+        // Render target to ith element.
         rtvDesc.Texture2DArray.FirstArraySlice = i;
+        // Only view one element of the array.
         rtvDesc.Texture2DArray.ArraySize = 1;
 
         cubeMap.CreateRenderTargetView(&rtvDesc, &rtvMemory, i);
     }
-
-    D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
-    dsvDesc.Format = depthFormat;
-    dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-    dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
-    dsvDesc.Texture2D.MipSlice = 0;
-    depthMap.CreateDepthStencilView(&dsvDesc, &dsvMemory, 0);
+    
+    for (UINT i = 0; i < FaceCount; ++i)
+    {
+        D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+        dsvDesc.Format = depthFormat;
+        dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+        dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
+        dsvDesc.Texture2D.MipSlice = 0;
+        
+        dsvDesc.Texture2DArray.FirstArraySlice = i;
+        dsvDesc.Texture2DArray.ArraySize = 1;
+        
+        depthMap.CreateDepthStencilView(&dsvDesc, &dsvMemory, i);
+    }
+    
 }

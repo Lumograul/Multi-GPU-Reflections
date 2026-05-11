@@ -1,4 +1,4 @@
-#include "HybridShadowApp.h"
+#include "HybridCubeMapApp.h"
 
 #include <array>
 #include <filesystem>
@@ -22,15 +22,15 @@ using namespace PEPEngine;
 using namespace Utils;
 using namespace Graphics;
 
-HybridShadowApp::HybridShadowApp(const HINSTANCE hInstance) : D3DApp(hInstance), gpuTimes{}, fullRect()
+HybridCubeMapApp::HybridCubeMapApp(const HINSTANCE hInstance) : D3DApp(hInstance), gpuTimes{}, fullRect()
 {
     mSceneBounds.Center = Vector3(0.0f, 0.0f, 0.0f);
     mSceneBounds.Radius = 200;
 }
 
-HybridShadowApp::~HybridShadowApp()
+HybridCubeMapApp::~HybridCubeMapApp()
 {
-    HybridShadowApp::Flush();
+    HybridCubeMapApp::Flush();
 
     for (auto&& device : devices)
     {
@@ -44,7 +44,7 @@ HybridShadowApp::~HybridShadowApp()
     logThreadIsAlive = false;
 }
 
-void HybridShadowApp::InitDevices()
+void HybridCubeMapApp::InitDevices()
 {
     devices.resize(GraphicAdapterCount);
 
@@ -94,7 +94,7 @@ void HybridShadowApp::InitDevices()
             devices[GraphicAdapterSecond]->IsCrossAdapterTextureSupported()));
 }
 
-void HybridShadowApp::InitFrameResource()
+void HybridCubeMapApp::InitFrameResource()
 {
     for (int i = 0; i < globalCountFrameResources; ++i)
     {
@@ -105,7 +105,7 @@ void HybridShadowApp::InitFrameResource()
     logQueue.Push(std::wstring(L"\nInit FrameResource "));
 }
 
-void HybridShadowApp::InitRootSignature()
+void HybridCubeMapApp::InitRootSignature()
 {
     for (int i = 0; i < GraphicAdapterCount; ++i)
     {
@@ -134,7 +134,7 @@ void HybridShadowApp::InitRootSignature()
         }
         else
         {
-            secondDeviceShadowMapSignature = rootSignature;
+            secondDeviceSignature = rootSignature;
         }
 
         logQueue.Push(std::wstring(L"\nInit RootSignature for " + devices[i]->GetName()));
@@ -200,7 +200,7 @@ void HybridShadowApp::InitRootSignature()
     }
 }
 
-void HybridShadowApp::InitPipeLineResource()
+void HybridCubeMapApp::InitPipeLineResource()
 {
     defaultInputLayout =
     {
@@ -224,19 +224,25 @@ void HybridShadowApp::InitPipeLineResource()
 
     const D3D12_INPUT_LAYOUT_DESC desc = {defaultInputLayout.data(), defaultInputLayout.size()};
 
-    defaultPrimePipelineResources = RenderModeFactory();
-    defaultPrimePipelineResources.LoadDefaultShaders();
-    defaultPrimePipelineResources.LoadDefaultPSO(devices[GraphicAdapterPrimary], primeDeviceSignature, desc,
-                                                 BackBufferFormat, DepthStencilFormat, ssaoPrimeRootSignature,
-                                                 NormalMapFormat, AmbientMapFormat);
+    primePipelineResources = RenderModeFactory();
+    primePipelineResources.LoadDefaultShaders();
+    primePipelineResources.LoadDefaultPSO(devices[GraphicAdapterPrimary], primeDeviceSignature, desc,
+                                          BackBufferFormat, DepthStencilFormat, ssaoPrimeRootSignature,
+                                          NormalMapFormat, AmbientMapFormat);
 
-    ambientPrimePath->SetPipelineData(*defaultPrimePipelineResources.GetPSO(RenderMode::Ssao),
-                                      *defaultPrimePipelineResources.GetPSO(RenderMode::SsaoBlur));
+    secondPipelineResources = RenderModeFactory();
+    secondPipelineResources.LoadDefaultShaders();
+    secondPipelineResources.LoadDefaultPSO(devices[GraphicAdapterSecond], secondDeviceSignature, desc,
+                                           BackBufferFormat, DepthStencilFormat, nullptr,
+                                           NormalMapFormat, AmbientMapFormat);
+
+    ambientPrimePath->SetPipelineData(*primePipelineResources.GetPSO(RenderMode::Ssao),
+                                      *primePipelineResources.GetPSO(RenderMode::SsaoBlur));
 
 
     logQueue.Push(std::wstring(L"\nInit PSO for " + devices[GraphicAdapterPrimary]->GetName()));
 
-    const auto primeDeviceShadowMapPso = defaultPrimePipelineResources.GetPSO(RenderMode::ShadowMapOpaque);
+    const auto primeDeviceShadowMapPso = primePipelineResources.GetPSO(RenderMode::ShadowMapOpaque);
 
 
     auto descPSO = primeDeviceShadowMapPso->GetPsoDescription();
@@ -260,59 +266,51 @@ void HybridShadowApp::InitPipeLineResource()
 
     shadowMapPSOSecondDevice = std::make_shared<GraphicPSO>();
     shadowMapPSOSecondDevice->SetPsoDesc(basePsoDesc);
-    shadowMapPSOSecondDevice->SetRootSignature(secondDeviceShadowMapSignature->GetNativeSignature().Get());
+    shadowMapPSOSecondDevice->SetRootSignature(secondDeviceSignature->GetNativeSignature().Get());
     shadowMapPSOSecondDevice->Initialize(devices[GraphicAdapterSecond]);
 }
 
-void HybridShadowApp::CreateMaterials()
+void HybridCubeMapApp::CreateMaterials()
 {
-    {
-        auto seamless = std::make_shared<Material>(L"seamless", RenderMode::Opaque);
-        seamless->FresnelR0 = Vector3(0.02f, 0.02f, 0.02f);
-        seamless->Roughness = 0.1f;
+    auto seamless = std::make_shared<Material>(L"seamless", RenderMode::Opaque);
+    seamless->FresnelR0 = Vector3(0.02f, 0.02f, 0.02f);
+    seamless->Roughness = 0.1f;
 
-        auto tex = assets[GraphicAdapterPrimary].GetTextureIndex(L"seamless");
-        seamless->SetDiffuseTexture(assets[GraphicAdapterPrimary].GetTexture(tex), tex);
+    auto tex = assets[GraphicAdapterPrimary].GetTextureIndex(L"seamless");
+    seamless->SetDiffuseTexture(assets[GraphicAdapterPrimary].GetTexture(tex), tex);
 
-        tex = assets[GraphicAdapterPrimary].GetTextureIndex(L"defaultNormalMap");
+    tex = assets[GraphicAdapterPrimary].GetTextureIndex(L"defaultNormalMap");
 
-        seamless->SetNormalMap(assets[GraphicAdapterPrimary].GetTexture(tex), tex);
-        assets[GraphicAdapterPrimary].AddMaterial(seamless);
+    seamless->SetNormalMap(assets[GraphicAdapterPrimary].GetTexture(tex), tex);
+    assets[GraphicAdapterPrimary].AddMaterial(seamless);
+        
+    models[GraphicAdapterPrimary][L"quad"]->SetMeshMaterial(
+        0, assets[GraphicAdapterPrimary].GetMaterial(assets[GraphicAdapterPrimary].GetMaterialIndex(L"seamless")));
 
+    auto mirror = std::make_shared<Material>(L"mirror", RenderMode::Reflection);
+    mirror->FresnelR0 = Vector3(0.98f, 0.98f, 0.98f);
+    mirror->Roughness = 0.02f;
 
-        models[GraphicAdapterPrimary][L"quad"]->SetMeshMaterial(
-            0, assets[GraphicAdapterPrimary].GetMaterial(assets[GraphicAdapterPrimary].GetMaterialIndex(L"seamless")));
-    }
+    auto white = assets[GraphicAdapterPrimary].GetTextureIndex(L"seamless");
+    mirror->SetDiffuseTexture(assets[GraphicAdapterPrimary].GetTexture(white), white);
 
-    {
-        auto mirror = std::make_shared<Material>(L"mirror", RenderMode::Opaque);
-        mirror->DiffuseAlbedo = Vector4(0.0f, 0.0f, 0.0f, 1.0f);
-        mirror->FresnelR0 = Vector3(0.98f, 0.98f, 0.98f);
-        mirror->Roughness = 0.02f;
-        mirror->EnableEnvReflection = 1;
-
-        auto white = assets[GraphicAdapterPrimary].GetTextureIndex(L"seamless");
-        mirror->SetDiffuseTexture(assets[GraphicAdapterPrimary].GetTexture(white), white);
-
-        auto nrm = assets[GraphicAdapterPrimary].GetTextureIndex(L"defaultNormalMap");
-        mirror->SetNormalMap(assets[GraphicAdapterPrimary].GetTexture(nrm), nrm);
-
-        assets[GraphicAdapterPrimary].AddMaterial(mirror);
-        mirror->SetMaterialIndex(assets[GraphicAdapterPrimary].GetMaterialIndex(L"mirror"));
-        models[GraphicAdapterPrimary][L"mirrorSphere"]->SetMeshMaterial(0, mirror);
-    }
-
+    auto nrm = assets[GraphicAdapterPrimary].GetTextureIndex(L"defaultNormalMap");
+    mirror->SetNormalMap(assets[GraphicAdapterPrimary].GetTexture(nrm), nrm);
+    assets[GraphicAdapterPrimary].AddMaterial(mirror);
+        
+    models[GraphicAdapterPrimary][L"mirrorSphere"]->SetMeshMaterial(
+        0, assets[GraphicAdapterPrimary].GetMaterial(assets[GraphicAdapterPrimary].GetMaterialIndex(L"mirror")));
+    
     logQueue.Push(std::wstring(L"\nCreate Materials"));
 }
 
-void HybridShadowApp::InitSRVMemoryAndMaterials()
+void HybridCubeMapApp::InitSRVMemoryAndMaterials()
 {
     for (int i = 0; i < GraphicAdapterCount; ++i)
     {
         srvTexturesMemory.push_back(
-            devices[i]->AllocateDescriptors(
-                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-                assets[i].GetTextures().size() + (i == GraphicAdapterPrimary ? 1 : 0)));
+            devices[i]->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, assets[i].GetTextures().size()));
+
 
         auto materials = assets[i].GetMaterials();
 
@@ -326,13 +324,10 @@ void HybridShadowApp::InitSRVMemoryAndMaterials()
         logQueue.Push(std::wstring(L"\nInit Views for " + devices[i]->GetName()));
     }
 
-    dynamicCubeMapSrvIndex = static_cast<UINT>(assets[GraphicAdapterPrimary].GetTextures().size());
-    dynamicCubeMap->BuildSRV(&srvTexturesMemory[GraphicAdapterPrimary], dynamicCubeMapSrvIndex);
-
     ambientPrimePath->BuildDescriptors();
 }
 
-void HybridShadowApp::InitRenderPaths()
+void HybridCubeMapApp::InitRenderPaths()
 {
     auto commandQueue = devices[GraphicAdapterPrimary]->GetCommandQueue(GQueueType::Graphics);
     auto cmdList = commandQueue->GetCommandList();
@@ -353,169 +348,180 @@ void HybridShadowApp::InitRenderPaths()
     shadowPathPrimeDevice = (std::make_shared<ShadowMap>(devices[GraphicAdapterPrimary], 2048, 2048));
 
     shadowPathSecondDevice = (std::make_shared<ShadowMap>(devices[GraphicAdapterSecond], 2048, 2048));
-
     auto shadowMapDesc = shadowPathSecondDevice->GetTexture().GetD3D12ResourceDesc();
 
     crossAdapterShadowMap = std::make_shared<GCrossAdapterResource>(shadowMapDesc, devices[GraphicAdapterPrimary],
                                                                     devices[GraphicAdapterSecond],
                                                                     L"Shared Shadow Map");
 
-    primeCopyShadowMapSRV = devices[GraphicAdapterPrimary]->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
-    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MostDetailedMip = 0;
-    srvDesc.Texture2D.MipLevels = 1;
-    srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-    srvDesc.Texture2D.PlaneSlice = 0;
-
-    primeCopyShadowMap = GTexture(devices[GraphicAdapterPrimary],
-                                  shadowPathSecondDevice->GetTexture().GetD3D12ResourceDesc());
-
-    primeCopyShadowMap.CreateShaderResourceView(&srvDesc, &primeCopyShadowMapSRV);
-
     dynamicCubeMap = std::make_shared<CubeMapRenderTarget>(
         devices[GraphicAdapterPrimary], DynamicCubeMapSize, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT);
+
+    dynamicCubeMapSecond = std::make_shared<CubeMapRenderTarget>(
+        devices[GraphicAdapterSecond], DynamicCubeMapSize, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT);
+
+    bakedCubeMapSecond = std::make_shared<BakedCubeMapRenderTarget>(
+        devices[GraphicAdapterSecond], BakedCubeMapSize, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT);
+    
+    CreateDynamicTextures(GraphicAdapterSecond);
+    
+    // cubeMapDesc.DepthOrArraySize = 1;
+
+    auto desc = dynamicCubeMapSecond->GetCubeMap().GetD3D12ResourceDesc();
+    desc.DepthOrArraySize = 1;
+    for (UINT face = 0; face < CubeMapRenderTarget::FaceCount; ++face)
+    {
+        crossAdapterCubeMaps[face] = std::make_shared<GCrossAdapterResource>(desc,
+                                                                             devices[GraphicAdapterPrimary],
+                                                                             devices[GraphicAdapterSecond],
+                                                                             L"Shared Cube Map " +
+                                                                             std::to_wstring(face));
+    }
+
+    primeCopyCubeMapSRV = devices[GraphicAdapterPrimary]->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
-void HybridShadowApp::LoadStudyTexture()
+void HybridCubeMapApp::LoadStudyTexture()
 {
+    auto queue = devices[GraphicAdapterPrimary]->GetCommandQueue(GQueueType::Compute);
+
+    auto cmdList = queue->GetCommandList();
+
+    auto bricksTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\bricks2.dds", cmdList);
+    bricksTex->SetName(L"bricksTex");
+    assets[GraphicAdapterPrimary].AddTexture(bricksTex);
+
+    auto stoneTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\stone.dds", cmdList);
+    stoneTex->SetName(L"stoneTex");
+    assets[GraphicAdapterPrimary].AddTexture(stoneTex);
+
+    auto tileTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\tile.dds", cmdList);
+    tileTex->SetName(L"tileTex");
+    assets[GraphicAdapterPrimary].AddTexture(tileTex);
+
+    auto fenceTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\WireFence.dds", cmdList);
+    fenceTex->SetName(L"fenceTex");
+    assets[GraphicAdapterPrimary].AddTexture(fenceTex);
+
+    auto waterTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\water1.dds", cmdList);
+    waterTex->SetName(L"waterTex");
+    assets[GraphicAdapterPrimary].AddTexture(waterTex);
+
+    auto skyTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\skymap.dds", cmdList);
+    skyTex->SetName(L"skyTex");
+    assets[GraphicAdapterPrimary].AddTexture(skyTex);
+
+    auto grassTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\grass.dds", cmdList);
+    grassTex->SetName(L"grassTex");
+    assets[GraphicAdapterPrimary].AddTexture(grassTex);
+
+    auto treeArrayTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\treeArray2.dds", cmdList);
+    treeArrayTex->SetName(L"treeArrayTex");
+    assets[GraphicAdapterPrimary].AddTexture(treeArrayTex);
+
+    auto seamless = GTexture::LoadTextureFromFile(L"Data\\Textures\\seamless_grass.jpg", cmdList);
+    seamless->SetName(L"seamless");
+    assets[GraphicAdapterPrimary].AddTexture(seamless);
+
+    auto white1x1 = GTexture::LoadTextureFromFile(L"Data\\Textures\\white1x1.dds", cmdList);
+    white1x1->SetName(L"white1x1Tex");
+    assets[GraphicAdapterPrimary].AddTexture(white1x1);
+
+
+    std::vector<std::wstring> texNormalNames =
     {
-        auto queue = devices[GraphicAdapterPrimary]->GetCommandQueue(GQueueType::Compute);
+        L"bricksNormalMap",
+        L"tileNormalMap",
+        L"defaultNormalMap"
+    };
 
-        auto cmdList = queue->GetCommandList();
+    std::vector<std::wstring> texNormalFilenames =
+    {
+        L"Data\\Textures\\bricks2_nmap.dds",
+        L"Data\\Textures\\tile_nmap.dds",
+        L"Data\\Textures\\default_nmap.dds"
+    };
 
-        auto bricksTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\bricks2.dds", cmdList);
-        bricksTex->SetName(L"bricksTex");
-        assets[GraphicAdapterPrimary].AddTexture(bricksTex);
-
-        auto stoneTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\stone.dds", cmdList);
-        stoneTex->SetName(L"stoneTex");
-        assets[GraphicAdapterPrimary].AddTexture(stoneTex);
-
-        auto tileTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\tile.dds", cmdList);
-        tileTex->SetName(L"tileTex");
-        assets[GraphicAdapterPrimary].AddTexture(tileTex);
-
-        auto fenceTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\WireFence.dds", cmdList);
-        fenceTex->SetName(L"fenceTex");
-        assets[GraphicAdapterPrimary].AddTexture(fenceTex);
-
-        auto waterTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\water1.dds", cmdList);
-        waterTex->SetName(L"waterTex");
-        assets[GraphicAdapterPrimary].AddTexture(waterTex);
-
-        auto skyTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\skymap.dds", cmdList);
-        skyTex->SetName(L"skyTex");
-        assets[GraphicAdapterPrimary].AddTexture(skyTex);
-        skyCubeMapTexIndex = assets[GraphicAdapterPrimary].GetTextureIndex(L"skyTex");
-
-        auto grassTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\grass.dds", cmdList);
-        grassTex->SetName(L"grassTex");
-        assets[GraphicAdapterPrimary].AddTexture(grassTex);
-
-        auto treeArrayTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\treeArray2.dds", cmdList);
-        treeArrayTex->SetName(L"treeArrayTex");
-        assets[GraphicAdapterPrimary].AddTexture(treeArrayTex);
-
-        auto seamless = GTexture::LoadTextureFromFile(L"Data\\Textures\\seamless_grass.jpg", cmdList);
-        seamless->SetName(L"seamless");
-        assets[GraphicAdapterPrimary].AddTexture(seamless);
-
-        auto white1x1 = GTexture::LoadTextureFromFile(L"Data\\Textures\\white1x1.dds", cmdList);
-        white1x1->SetName(L"white1x1Tex");
-        assets[GraphicAdapterPrimary].AddTexture(white1x1);
-
-
-        std::vector<std::wstring> texNormalNames =
-        {
-            L"bricksNormalMap",
-            L"tileNormalMap",
-            L"defaultNormalMap"
-        };
-
-        std::vector<std::wstring> texNormalFilenames =
-        {
-            L"Data\\Textures\\bricks2_nmap.dds",
-            L"Data\\Textures\\tile_nmap.dds",
-            L"Data\\Textures\\default_nmap.dds"
-        };
-
-        for (int j = 0; j < texNormalNames.size(); ++j)
-        {
-            auto texture = GTexture::LoadTextureFromFile(texNormalFilenames[j], cmdList, TextureUsage::Normalmap);
-            texture->SetName(texNormalNames[j]);
-            assets[GraphicAdapterPrimary].AddTexture(texture);
-        }
-
-        queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
+    for (int j = 0; j < texNormalNames.size(); ++j)
+    {
+        auto texture = GTexture::LoadTextureFromFile(texNormalFilenames[j], cmdList, TextureUsage::Normalmap);
+        texture->SetName(texNormalNames[j]);
+        assets[GraphicAdapterPrimary].AddTexture(texture);
     }
+
+    queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
+
 
     logQueue.Push(std::wstring(L"\nLoad DDS Texture"));
 }
 
-void HybridShadowApp::LoadModels()
+void HybridCubeMapApp::LoadModels()
 {
-    auto queue = devices[GraphicAdapterPrimary]->GetCommandQueue(GQueueType::Compute);
-    auto cmdList = queue->GetCommandList();
+    
+        auto queue = devices[GraphicAdapterPrimary]->GetCommandQueue(GQueueType::Compute);
+        auto cmdList = queue->GetCommandList();
 
-    auto nano = assets[GraphicAdapterPrimary].CreateModelFromFile(cmdList, "Data\\Objects\\Nanosuit\\Nanosuit.obj");
-    models[GraphicAdapterPrimary][L"nano"] = std::move(nano);
+        auto nano = assets[GraphicAdapterPrimary].CreateModelFromFile(
+            cmdList, "Data\\Objects\\Nanosuit\\Nanosuit.obj");
+        models[GraphicAdapterPrimary][L"nano"] = std::move(nano);
 
-    auto atlas = assets[GraphicAdapterPrimary].CreateModelFromFile(cmdList, "Data\\Objects\\Atlas\\Atlas.obj");
-    models[GraphicAdapterPrimary][L"atlas"] = std::move(atlas);
-    auto pbody = assets[GraphicAdapterPrimary].CreateModelFromFile(cmdList, "Data\\Objects\\P-Body\\P-Body.obj");
-    models[GraphicAdapterPrimary][L"pbody"] = std::move(pbody);
+        auto atlas = assets[GraphicAdapterPrimary].CreateModelFromFile(
+            cmdList, "Data\\Objects\\Atlas\\Atlas.obj");
+        models[GraphicAdapterPrimary][L"atlas"] = std::move(atlas);
+        auto pbody = assets[GraphicAdapterPrimary].CreateModelFromFile(
+            cmdList, "Data\\Objects\\P-Body\\P-Body.obj");
+        models[GraphicAdapterPrimary][L"pbody"] = std::move(pbody);
 
-    auto griffon = assets[GraphicAdapterPrimary].CreateModelFromFile(cmdList, "Data\\Objects\\Griffon\\Griffon.FBX");
-    griffon->scaleMatrix = Matrix::CreateScale(0.1);
-    models[GraphicAdapterPrimary][L"griffon"] = std::move(griffon);
+        auto griffon = assets[GraphicAdapterPrimary].CreateModelFromFile(
+            cmdList, "Data\\Objects\\Griffon\\Griffon.FBX");
+        griffon->scaleMatrix = Matrix::CreateScale(0.1);
+        models[GraphicAdapterPrimary][L"griffon"] = std::move(griffon);
 
-    auto mountDragon = assets[GraphicAdapterPrimary].CreateModelFromFile(
-        cmdList, "Data\\Objects\\MOUNTAIN_DRAGON\\MOUNTAIN_DRAGON.FBX");
-    mountDragon->scaleMatrix = Matrix::CreateScale(0.1);
-    models[GraphicAdapterPrimary][L"mountDragon"] = std::move(mountDragon);
+        auto mountDragon = assets[GraphicAdapterPrimary].CreateModelFromFile(
+            cmdList, "Data\\Objects\\MOUNTAIN_DRAGON\\MOUNTAIN_DRAGON.FBX");
+        mountDragon->scaleMatrix = Matrix::CreateScale(0.1);
+        models[GraphicAdapterPrimary][L"mountDragon"] = std::move(mountDragon);
 
-    auto desertDragon = assets[GraphicAdapterPrimary].CreateModelFromFile(
-        cmdList, "Data\\Objects\\DesertDragon\\DesertDragon.FBX");
-    desertDragon->scaleMatrix = Matrix::CreateScale(0.1);
-    models[GraphicAdapterPrimary][L"desertDragon"] = std::move(desertDragon);
+        auto desertDragon = assets[GraphicAdapterPrimary].CreateModelFromFile(
+            cmdList, "Data\\Objects\\DesertDragon\\DesertDragon.FBX");
+        desertDragon->scaleMatrix = Matrix::CreateScale(0.1);
+        models[GraphicAdapterPrimary][L"desertDragon"] = std::move(desertDragon);
 
-    auto sphere = assets[GraphicAdapterPrimary].GenerateSphere(cmdList);
-    models[GraphicAdapterPrimary][L"sphere"] = std::move(sphere);
-    models[GraphicAdapterPrimary][L"mirrorSphere"] = assets[GraphicAdapterPrimary].GenerateSphere(cmdList);
+        auto sphere = assets[GraphicAdapterPrimary].GenerateSphere(cmdList);
+        models[GraphicAdapterPrimary][L"sphere"] = std::move(sphere);
+        models[GraphicAdapterPrimary][L"mirrorSphere"] = assets[GraphicAdapterPrimary].GenerateSphere(cmdList);
 
-    auto quad = assets[GraphicAdapterPrimary].GenerateQuad(cmdList);
-    models[GraphicAdapterPrimary][L"quad"] = std::move(quad);
+        auto quad = assets[GraphicAdapterPrimary].GenerateQuad(cmdList);
+        models[GraphicAdapterPrimary][L"quad"] = std::move(quad);
 
-    auto stair = assets[GraphicAdapterPrimary].CreateModelFromFile(
-        cmdList, "Data\\Objects\\Temple\\SM_AsianCastle_A.FBX");
-    models[GraphicAdapterPrimary][L"stair"] = std::move(stair);
+        auto stair = assets[GraphicAdapterPrimary].CreateModelFromFile(
+            cmdList, "Data\\Objects\\Temple\\SM_AsianCastle_A.FBX");
+        models[GraphicAdapterPrimary][L"stair"] = std::move(stair);
 
-    auto columns = assets[GraphicAdapterPrimary].CreateModelFromFile(
-        cmdList, "Data\\Objects\\Temple\\SM_AsianCastle_E.FBX");
-    models[GraphicAdapterPrimary][L"columns"] = std::move(columns);
+        auto columns = assets[GraphicAdapterPrimary].CreateModelFromFile(
+            cmdList, "Data\\Objects\\Temple\\SM_AsianCastle_E.FBX");
+        models[GraphicAdapterPrimary][L"columns"] = std::move(columns);
 
-    auto fountain = assets[GraphicAdapterPrimary].
-        CreateModelFromFile(cmdList, "Data\\Objects\\Temple\\SM_Fountain.FBX");
-    models[GraphicAdapterPrimary][L"fountain"] = std::move(fountain);
+        auto fountain = assets[GraphicAdapterPrimary].
+            CreateModelFromFile(cmdList, "Data\\Objects\\Temple\\SM_Fountain.FBX");
+        models[GraphicAdapterPrimary][L"fountain"] = std::move(fountain);
 
-    auto platform = assets[GraphicAdapterPrimary].CreateModelFromFile(
-        cmdList, "Data\\Objects\\Temple\\SM_PlatformSquare.FBX");
-    models[GraphicAdapterPrimary][L"platform"] = std::move(platform);
+        auto platform = assets[GraphicAdapterPrimary].CreateModelFromFile(
+            cmdList, "Data\\Objects\\Temple\\SM_PlatformSquare.FBX");
+        models[GraphicAdapterPrimary][L"platform"] = std::move(platform);
 
-    auto doom = assets[GraphicAdapterPrimary].CreateModelFromFile(cmdList, "Data\\Objects\\DoomSlayer\\doommarine.obj");
-    models[GraphicAdapterPrimary][L"doom"] = std::move(doom);
+        auto doom = assets[GraphicAdapterPrimary].CreateModelFromFile(
+            cmdList, "Data\\Objects\\DoomSlayer\\doommarine.obj");
+        models[GraphicAdapterPrimary][L"doom"] = std::move(doom);
 
-    queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
-    queue->Flush();
+        queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
+        queue->Flush();
 
-    logQueue.Push(std::wstring(L"\nLoad Models Data"));
+        logQueue.Push(std::wstring(L"\nLoad Models Data"));
+    
 }
 
-void HybridShadowApp::MipMasGenerate()
+void HybridCubeMapApp::MipMasGenerate()
 {
     try
     {
@@ -573,7 +579,7 @@ void HybridShadowApp::MipMasGenerate()
     }
 }
 
-void HybridShadowApp::DublicateResource()
+void HybridCubeMapApp::DublicateResource()
 {
     for (int i = GraphicAdapterPrimary + 1; i < GraphicAdapterCount; ++i)
     {
@@ -581,17 +587,66 @@ void HybridShadowApp::DublicateResource()
         try
         {
             auto queue = devices[i]->GetCommandQueue(GQueueType::Compute);
-            const auto cmdList = queue->GetCommandList();
-
-
+            auto cmdList = queue->GetCommandList();
+            
             logQueue.Push(std::wstring(L"\nGet CmdList For " + devices[i]->GetName()));
+
+            for (auto&& texture : assets[GraphicAdapterPrimary].GetTextures())
+            {
+                texture->ClearTrack();
+
+                auto tex = GTexture::LoadTextureFromFile(texture->GetFilePath(), cmdList);
+                tex->SetName(texture->GetName());
+                tex->ClearTrack();
+
+                assets[i].AddTexture(std::move(tex));
+
+                logQueue.Push(std::wstring(L"\nLoad Texture " + texture->GetName() + L" for " + devices[i]->GetName()));
+            }
+
+            logQueue.Push(std::wstring(L"\nDublicate texture Resource for " + devices[i]->GetName()));
+
+            for (auto&& material : assets[GraphicAdapterPrimary].GetMaterials())
+            {
+                auto copy = std::make_shared<Material>(material->GetName(), material->GetPSO());
+
+                copy->SetMaterialIndex(material->GetMaterialIndex());
+
+                auto index = assets[i].GetTextureIndex(material->GetDiffuseTexture()->GetName());
+                auto texture = assets[i].GetTexture(index);
+                copy->SetDiffuseTexture(texture, index);
+
+                index = assets[i].GetTextureIndex(material->GetNormalTexture()->GetName());
+                texture = assets[i].GetTexture(index);
+                copy->SetNormalMap(texture, index);
+
+                copy->DiffuseAlbedo = material->DiffuseAlbedo;
+                copy->FresnelR0 = material->FresnelR0;
+                copy->Roughness = material->Roughness;
+                copy->MatTransform = material->MatTransform;
+
+                assets[i].AddMaterial(std::move(copy));
+            }
+            logQueue.Push(std::wstring(L"\nDublicate material Resource for " + devices[i]->GetName()));
 
             for (auto&& model : models[GraphicAdapterPrimary])
             {
                 auto modelCopy = model.second->Dublicate(cmdList);
 
+                for (int j = 0; j < model.second->GetMeshesCount(); ++j)
+                {
+                    auto originMaterial = model.second->GetMeshMaterial(j);
+
+                    if (originMaterial != nullptr)
+                        modelCopy->SetMeshMaterial(
+                            j, assets[i].GetMaterial(assets[i].GetMaterialIndex(originMaterial->GetName())));
+                }
+
                 models[i][model.first] = std::move(modelCopy);
             }
+
+            logQueue.Push(std::wstring(L"\nDublicate models Resource for " + devices[i]->GetName()));
+
             queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
 
             logQueue.Push(std::wstring(L"\nDublicate Resource for " + devices[i]->GetName()));
@@ -607,7 +662,7 @@ void HybridShadowApp::DublicateResource()
     }
 }
 
-void HybridShadowApp::SortGO()
+void HybridCubeMapApp::SortGO()
 {
     for (auto&& item : gameObjects)
     {
@@ -625,41 +680,45 @@ void HybridShadowApp::SortGO()
     }
 }
 
-std::shared_ptr<Renderer> HybridShadowApp::CreateRenderer(const UINT deviceIndex, std::shared_ptr<GModel> model)
+std::shared_ptr<Renderer> HybridCubeMapApp::CreateRenderer(const UINT deviceIndex, std::shared_ptr<GModel> model)
 {
     auto renderer = std::make_shared<ModelRenderer>(devices[deviceIndex], model);
     return renderer;
 }
 
-void HybridShadowApp::AddMultiDeviceOpaqueRenderComponent(GameObject* object, const std::wstring& modelName,
+void HybridCubeMapApp::AddMultiDeviceOpaqueRenderComponent(GameObject* object, const std::wstring& modelName,
                                                           RenderMode psoType)
 {
     for (int i = 0; i < GraphicAdapterCount; ++i)
     {
         auto renderer = CreateRenderer(i, models[i][modelName]);
         object->AddComponent(renderer);
-        typedRenderer[i][static_cast<int>(RenderMode::OpaqueAlphaDrop)].push_back(renderer);
+        typedRenderer[i][static_cast<int>(psoType)].push_back(renderer);
     }
 }
 
-void HybridShadowApp::CreateGO()
+void HybridCubeMapApp::CreateGO()
 {
-    logQueue.Push(std::wstring(L"\nStart Create GO"));
-    auto skySphere = std::make_unique<GameObject>("Sky");
-    skySphere->GetTransform()->SetScale({500, 500, 500});
-    {
-        auto renderer = std::make_shared<SkyBox>(devices[GraphicAdapterPrimary],
-                                                 models[GraphicAdapterPrimary][L"sphere"],
-                                                 *assets[GraphicAdapterPrimary].GetTexture(
-                                                     assets[GraphicAdapterPrimary].
-                                                     GetTextureIndex(L"skyTex")).get(),
-                                                 &srvTexturesMemory[GraphicAdapterPrimary],
-                                                 assets[GraphicAdapterPrimary].GetTextureIndex(L"skyTex"));
+    
+    
+        logQueue.Push(std::wstring(L"\nStart Create GO"));
+        auto skySphere = std::make_unique<GameObject>("Sky");
+        skySphere->GetTransform()->SetScale({500, 500, 500});
+        for (int i = 0; i < GraphicAdapterCount; ++i)
+        {
+            auto renderer = std::make_shared<SkyBox>(devices[i],
+                                                     models[i][L"sphere"],
+                                                     *assets[i].GetTexture(
+                                                         assets[i].
+                                                         GetTextureIndex(L"skyTex")).get(),
+                                                     &srvTexturesMemory[i],
+                                                     assets[i].GetTextureIndex(L"skyTex"));
 
-        skySphere->AddComponent(renderer);
-        typedRenderer[GraphicAdapterPrimary][static_cast<int>(RenderMode::SkyBox)].push_back((renderer));
-    }
-    gameObjects.push_back(std::move(skySphere));
+            skySphere->AddComponent(renderer);
+            typedRenderer[i][static_cast<int>(RenderMode::SkyBox)].push_back((renderer));
+        }
+        gameObjects.push_back(std::move(skySphere));
+    
 
     auto mirrorSphere = std::make_unique<GameObject>("MirrorSphere");
     mirrorSphere->GetTransform()->SetPosition(Vector3(0.0f, 20.0f, 0.0f));
@@ -668,55 +727,38 @@ void HybridShadowApp::CreateGO()
     auto mirrorRenderer = std::make_shared<ModelRenderer>(devices[GraphicAdapterPrimary],
                                                           models[GraphicAdapterPrimary][L"mirrorSphere"]);
     mirrorSphere->AddComponent(mirrorRenderer);
-    typedRenderer[GraphicAdapterPrimary][static_cast<int>(RenderMode::Opaque)].push_back(mirrorRenderer);
+    typedRenderer[GraphicAdapterPrimary][static_cast<int>(RenderMode::Reflection)].push_back(mirrorRenderer);
 
-    mirrorSphereRenderer = mirrorRenderer;
     mirrorSphereTransform = mirrorSphere->GetTransform();
 
     gameObjects.push_back(std::move(mirrorSphere));
 
-    auto quadRitem = std::make_unique<GameObject>("Quad");
-    {
-        auto renderer = std::make_shared<ModelRenderer>(devices[GraphicAdapterPrimary],
-                                                        models[GraphicAdapterPrimary][L"quad"]);
-        renderer->SetModel(models[GraphicAdapterPrimary][L"quad"]);
-        quadRitem->AddComponent(renderer);
-        typedRenderer[GraphicAdapterPrimary][static_cast<int>(RenderMode::Debug)].push_back(renderer);
-        typedRenderer[GraphicAdapterPrimary][static_cast<int>(RenderMode::Quad)].push_back(renderer);
-    }
+    
+    
+        auto quadRitem = std::make_unique<GameObject>("Quad");
+    auto renderer = std::make_shared<ModelRenderer>(devices[GraphicAdapterPrimary],
+                                        models[GraphicAdapterPrimary][L"quad"]);
+    renderer->SetModel(models[GraphicAdapterPrimary][L"quad"]);
+    quadRitem->AddComponent(renderer);
+    typedRenderer[GraphicAdapterPrimary][static_cast<int>(RenderMode::Debug)].push_back(renderer);
+    typedRenderer[GraphicAdapterPrimary][static_cast<int>(RenderMode::Quad)].push_back(renderer);
     gameObjects.push_back(std::move(quadRitem));
 
+        auto sun1 = std::make_unique<GameObject>("Directional Light");
+        auto light = std::make_shared<Light>(Directional);
+        light->Direction({0.57735f, -0.57735f, 0.57735f});
+        light->Strength({0.8f, 0.8f, 0.8f});
+        sun1->AddComponent(light);
+        gameObjects.push_back(std::move(sun1));
 
-    auto sun1 = std::make_unique<GameObject>("Directional Light");
-    auto light = std::make_shared<Light>(Directional);
-    light->Direction({0.57735f, -0.57735f, 0.57735f});
-    light->Strength({0.8f, 0.8f, 0.8f});
-    sun1->AddComponent(light);
-    gameObjects.push_back(std::move(sun1));
-
-    for (int i = 0; i < 11; ++i)
-    {
-        auto nano = std::make_unique<GameObject>();
-        nano->GetTransform()->SetPosition(Vector3::Right * -15 + Vector3::Forward * 12 * i);
-        nano->GetTransform()->SetEulerRotate(Vector3(0, -90, 0));
-        AddMultiDeviceOpaqueRenderComponent(nano.get(), L"nano");
-        gameObjects.push_back(std::move(nano));
-
-
-        auto doom = std::make_unique<GameObject>();
-        doom->SetScale(0.08);
-        doom->GetTransform()->SetPosition(Vector3::Right * 15 + Vector3::Forward * 12 * i);
-        doom->GetTransform()->SetEulerRotate(Vector3(0, 90, 0));
-        AddMultiDeviceOpaqueRenderComponent(doom.get(), L"doom");
-        gameObjects.push_back(std::move(doom));
-    }
-
+    
     auto orbitNano = std::make_unique<GameObject>("OrbitNano");
     orbitNano->SetScale(0.5f);
-    auto orbitRenderer = std::make_shared<ModelRenderer>(devices[GraphicAdapterPrimary],
-                                                         models[GraphicAdapterPrimary][L"nano"]);
-    orbitNano->AddComponent(orbitRenderer);
-    typedRenderer[GraphicAdapterPrimary][static_cast<int>(RenderMode::Opaque)].push_back(orbitRenderer);
+    AddMultiDeviceOpaqueRenderComponent(orbitNano.get(), L"nano", RenderMode::DynamicOpaque);
+    
+    //auto orbitRenderer = std::make_shared<ModelRenderer>(devices[GraphicAdapterPrimary],
+    //                                                     models[GraphicAdapterPrimary][L"nano"]);
+    //typedRenderer[GraphicAdapterPrimary][static_cast<int>(RenderMode::Opaque)].push_back(orbitRenderer);
 
     auto orbit = std::make_shared<Orbiter>(
         mirrorSphereTransform,
@@ -725,26 +767,41 @@ void HybridShadowApp::CreateGO()
         Vector3(0.0f, 90.0f, 0.0f));
     orbitNano->AddComponent(orbit);
     gameObjects.push_back(std::move(orbitNano));
-
-    for (int i = 0; i < 12; ++i)
+    
+    for (int j = 0; j < 11; ++j)
     {
-        for (int j = 0; j < 3; ++j)
+        auto nano = std::make_unique<GameObject>();
+        nano->GetTransform()->SetPosition(Vector3::Right * -15 + Vector3::Forward * 12 * j);
+        nano->GetTransform()->SetEulerRotate(Vector3(0, -90, 0));
+        AddMultiDeviceOpaqueRenderComponent(nano.get(), L"nano");
+        gameObjects.push_back(std::move(nano));
+
+        auto doom = std::make_unique<GameObject>();
+        doom->SetScale(0.08);
+        doom->GetTransform()->SetPosition(Vector3::Right * 15 + Vector3::Forward * 12 * j);
+        doom->GetTransform()->SetEulerRotate(Vector3(0, 90, 0));
+        AddMultiDeviceOpaqueRenderComponent(doom.get(), L"doom");
+        gameObjects.push_back(std::move(doom));
+    }
+
+    for (int j = 0; j < 12; ++j)
+    {
+        for (int k = 0; k < 3; ++k)
         {
             auto atlas = std::make_unique<GameObject>();
             atlas->GetTransform()->SetPosition(
-                Vector3::Right * -60 + Vector3::Right * -30 * j + Vector3::Up * 11 + Vector3::Forward * 10 * i);
+                Vector3::Right * -60 + Vector3::Right * -30 * k + Vector3::Up * 11 + Vector3::Forward * 10 * j);
             AddMultiDeviceOpaqueRenderComponent(atlas.get(), L"atlas");
             gameObjects.push_back(std::move(atlas));
 
 
             auto pbody = std::make_unique<GameObject>();
             pbody->GetTransform()->SetPosition(
-                Vector3::Right * 130 + Vector3::Right * -30 * j + Vector3::Up * 11 + Vector3::Forward * 10 * i);
+                Vector3::Right * 130 + Vector3::Right * -30 * k + Vector3::Up * 11 + Vector3::Forward * 10 * j);
             AddMultiDeviceOpaqueRenderComponent(pbody.get(), L"pbody");
             gameObjects.push_back(std::move(pbody));
         }
     }
-
 
     auto platform = std::make_unique<GameObject>();
     platform->SetScale(0.2);
@@ -757,7 +814,7 @@ void HybridShadowApp::CreateGO()
     rotater->GetTransform()->SetParent(platform->GetTransform().get());
     rotater->GetTransform()->SetPosition(Vector3::Forward * 325 + Vector3::Left * 625);
     rotater->GetTransform()->SetEulerRotate(Vector3(0, -90, 90));
-    //rotater->AddComponent(std::make_shared<Rotater>(10));
+    //rotater->AddComponent(std::make_shared<Rotater>(10)); // comment to disable auto camera rotation
 
     auto camera = std::make_unique<GameObject>("MainCamera");
     camera->GetTransform()->SetParent(rotater->GetTransform().get());
@@ -774,14 +831,12 @@ void HybridShadowApp::CreateGO()
     gameObjects.push_back(std::move(camera));
     gameObjects.push_back(std::move(rotater));
 
-
     auto stair = std::make_unique<GameObject>();
     stair->GetTransform()->SetParent(platform->GetTransform().get());
     stair->SetScale(0.2);
     stair->GetTransform()->SetEulerRotate(Vector3(0, 0, 90));
     stair->GetTransform()->SetPosition(Vector3::Left * 700);
     AddMultiDeviceOpaqueRenderComponent(stair.get(), L"stair");
-
 
     auto columns = std::make_unique<GameObject>();
     columns->GetTransform()->SetParent(stair->GetTransform().get());
@@ -801,13 +856,11 @@ void HybridShadowApp::CreateGO()
     gameObjects.push_back(std::move(columns));
     gameObjects.push_back(std::move(fountain));
 
-
     auto mountDragon = std::make_unique<GameObject>();
     mountDragon->GetTransform()->SetEulerRotate(Vector3(90, 0, 0));
     mountDragon->GetTransform()->SetPosition(Vector3::Right * -960 + Vector3::Up * 45 + Vector3::Backward * 775);
     AddMultiDeviceOpaqueRenderComponent(mountDragon.get(), L"mountDragon");
     gameObjects.push_back(std::move(mountDragon));
-
 
     auto desertDragon = std::make_unique<GameObject>();
     desertDragon->GetTransform()->SetEulerRotate(Vector3(90, 0, 0));
@@ -832,7 +885,7 @@ void HybridShadowApp::CreateGO()
     logQueue.Push(std::wstring(L"\nFinish create GO"));
 }
 
-void HybridShadowApp::CalculateFrameStats()
+void HybridCubeMapApp::CalculateFrameStats()
 {
     static float minFps = std::numeric_limits<float>::max();
     static float minMspf = std::numeric_limits<float>::max();
@@ -933,7 +986,7 @@ void HybridShadowApp::CalculateFrameStats()
     }
 }
 
-void HybridShadowApp::LogWriting()
+void HybridCubeMapApp::LogWriting()
 {
     const std::filesystem::path filePath(
         L"PartShadow " + devices[0]->GetName() + L"+" + devices[1]->GetName() + L".txt");
@@ -965,7 +1018,7 @@ void HybridShadowApp::LogWriting()
     fileSteam.close();
 }
 
-bool HybridShadowApp::Initialize()
+bool HybridCubeMapApp::Initialize()
 {
     InitDevices();
     InitMainWindow();
@@ -1006,7 +1059,7 @@ bool HybridShadowApp::Initialize()
     return true;
 }
 
-void HybridShadowApp::UpdateMaterials()
+void HybridCubeMapApp::UpdateMaterials()
 {
     for (int i = 0; i < GraphicAdapterCount; ++i)
     {
@@ -1021,7 +1074,7 @@ void HybridShadowApp::UpdateMaterials()
     }
 }
 
-void HybridShadowApp::Update(const GameTimer& gt)
+void HybridCubeMapApp::Update(const GameTimer& gt)
 {
     UINT olderIndex = currentFrameResourceIndex - 1 > globalCountFrameResources
                           ? 0
@@ -1089,7 +1142,7 @@ void HybridShadowApp::Update(const GameTimer& gt)
     UpdateSsaoCB(gt);
 }
 
-void HybridShadowApp::UpdateShadowTransform(const GameTimer& gt)
+void HybridCubeMapApp::UpdateShadowTransform(const GameTimer& gt)
 {
     // Only the first "main" light casts a shadow.
     Vector3 lightDir = mRotatedLightDirections[0];
@@ -1130,7 +1183,7 @@ void HybridShadowApp::UpdateShadowTransform(const GameTimer& gt)
     mShadowTransform = S;
 }
 
-void HybridShadowApp::UpdateShadowPassCB(const GameTimer& gt)
+void HybridCubeMapApp::UpdateShadowPassCB(const GameTimer& gt)
 {
     auto view = mLightView;
     auto proj = mLightProj;
@@ -1155,14 +1208,14 @@ void HybridShadowApp::UpdateShadowPassCB(const GameTimer& gt)
     shadowPassCB.RenderTargetSize = Vector2(static_cast<float>(w), static_cast<float>(h));
     shadowPassCB.InvRenderTargetSize = Vector2(1.0f / w, 1.0f / h);
 
-    auto currPassCB = currentFrameResource->ShadowPassConstantUploadBuffer;
+    auto currPassCB = currentFrameResource->SecondPassConstantUploadBuffer;
     currPassCB->CopyData(0, shadowPassCB);
 
     currPassCB = currentFrameResource->PrimePassConstantUploadBuffer;
     currPassCB->CopyData(1, shadowPassCB);
 }
 
-void HybridShadowApp::UpdateMainPassCB(const GameTimer& gt)
+void HybridCubeMapApp::UpdateMainPassCB(const GameTimer& gt)
 {
     auto view = camera->GetViewMatrix();
     auto proj = camera->GetProjectionMatrix();
@@ -1225,7 +1278,7 @@ void HybridShadowApp::UpdateMainPassCB(const GameTimer& gt)
     }
 }
 
-void HybridShadowApp::UpdateSsaoCB(const GameTimer& gt)
+void HybridCubeMapApp::UpdateSsaoCB(const GameTimer& gt)
 {
     SsaoConstants ssaoCB;
 
@@ -1265,10 +1318,8 @@ void HybridShadowApp::UpdateSsaoCB(const GameTimer& gt)
     }
 }
 
-void HybridShadowApp::PopulateShadowMapCommands(const GraphicsAdapter adapter, std::shared_ptr<GCommandList> cmdList)
+void HybridCubeMapApp::PopulateShadowMapCommands(const GraphicsAdapter adapter, std::shared_ptr<GCommandList> cmdList)
 {
-    if (UseOnlyPrime)
-    {
         cmdList->SetRootSignature(*primeDeviceSignature.get());
         cmdList->SetRootShaderResourceView(StandardShaderSlot::MaterialData,
                                            *currentFrameResource->MaterialBuffers[GraphicAdapterPrimary]);
@@ -1278,42 +1329,15 @@ void HybridShadowApp::PopulateShadowMapCommands(const GraphicsAdapter adapter, s
 
         shadowPathPrimeDevice->PopulatePreRenderCommands(cmdList);
 
-        cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::ShadowMapOpaque));
+        cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::ShadowMapOpaque));
         PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::Opaque);
         PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::OpaqueAlphaDrop);
 
         cmdList->TransitionBarrier(shadowPathPrimeDevice->GetTexture(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        cmdList->FlushResourceBarriers();
-    }
-    else
-    {
-        if (adapter == GraphicAdapterPrimary)
-        {
-            cmdList->CopyResource(primeCopyShadowMap, crossAdapterShadowMap->GetPrimeResource());
-        }
-        else
-        {
-            //Draw Shadow Map
-            cmdList->SetRootSignature(*secondDeviceShadowMapSignature.get());
-
-            cmdList->SetRootShaderResourceView(StandardShaderSlot::MaterialData,
-                                               *currentFrameResource->MaterialBuffers[GraphicAdapterSecond]);
-            cmdList->SetRootConstantBufferView(StandardShaderSlot::CameraData,
-                                               *currentFrameResource->ShadowPassConstantUploadBuffer);
-
-            shadowPathSecondDevice->PopulatePreRenderCommands(cmdList);
-
-            cmdList->SetPipelineState(*shadowMapPSOSecondDevice.get());
-            PopulateDrawCommands(GraphicAdapterSecond, cmdList, RenderMode::Opaque);
-            PopulateDrawCommands(GraphicAdapterSecond, cmdList, RenderMode::OpaqueAlphaDrop);
-
-            PopulateCopyResource(cmdList, shadowPathSecondDevice->GetTexture(),
-                                 crossAdapterShadowMap->GetSharedResource());
-        }
-    }
+        cmdList->FlushResourceBarriers();    
 }
 
-void HybridShadowApp::PopulateNormalMapCommands(const std::shared_ptr<GCommandList>& cmdList)
+void HybridCubeMapApp::PopulateNormalMapCommands(const std::shared_ptr<GCommandList>& cmdList)
 {
     //Draw Normals
     {
@@ -1342,9 +1366,9 @@ void HybridShadowApp::PopulateNormalMapCommands(const std::shared_ptr<GCommandLi
         cmdList->SetRenderTargets(1, normalMapRtv, 0, normalMapDsv);
         cmdList->SetRootConstantBufferView(1, *currentFrameResource->PrimePassConstantUploadBuffer);
 
-        cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::DrawNormalsOpaque));
+        cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::DrawNormalsOpaque));
         PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::Opaque);
-        cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::DrawNormalsOpaqueDrop));
+        cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::DrawNormalsOpaqueDrop));
         PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::OpaqueAlphaDrop);
 
 
@@ -1354,7 +1378,7 @@ void HybridShadowApp::PopulateNormalMapCommands(const std::shared_ptr<GCommandLi
     }
 }
 
-void HybridShadowApp::PopulateAmbientMapCommands(const std::shared_ptr<GCommandList>& cmdList)
+void HybridCubeMapApp::PopulateAmbientMapCommands(const std::shared_ptr<GCommandList>& cmdList)
 {
     //Draw Ambient
     {
@@ -1369,7 +1393,7 @@ void HybridShadowApp::PopulateAmbientMapCommands(const std::shared_ptr<GCommandL
     }
 }
 
-void HybridShadowApp::PopulateForwardPathCommands(const std::shared_ptr<GCommandList>& cmdList)
+void HybridCubeMapApp::PopulateForwardPathCommands(const std::shared_ptr<GCommandList>& cmdList)
 {
     //Forward Path with SSAA
     {
@@ -1397,53 +1421,43 @@ void HybridShadowApp::PopulateForwardPathCommands(const std::shared_ptr<GCommand
             SetRootConstantBufferView(StandardShaderSlot::CameraData,
                                       *currentFrameResource->PrimePassConstantUploadBuffer);
 
-        cmdList->SetRootDescriptorTable(StandardShaderSlot::ShadowMap,
-                                        UseOnlyPrime ? shadowPathPrimeDevice->GetSrv() : &primeCopyShadowMapSRV);
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::ShadowMap, shadowPathPrimeDevice->GetSrv());
         cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap, ambientPrimePath->AmbientMapSrv(), 0);
 
 
-        cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::SkyBox));
+        cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::SkyBox));
         PopulateDrawCommands(GraphicAdapterPrimary, cmdList, (RenderMode::SkyBox));
-
-        cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Opaque));
-        if (mirrorSphereRenderer != nullptr)
-        {
-            PopulateDrawCommandsExcept(GraphicAdapterPrimary, cmdList, RenderMode::Opaque, mirrorSphereRenderer.get());
-            cmdList->SetRootDescriptorTable(StandardShaderSlot::SkyMap,
-                                            &srvTexturesMemory[GraphicAdapterPrimary],
-                                            dynamicCubeMapSrvIndex);
-            mirrorSphereRenderer->Draw(cmdList);
-            cmdList->SetRootDescriptorTable(StandardShaderSlot::SkyMap,
-                                            &srvTexturesMemory[GraphicAdapterPrimary],
-                                            skyCubeMapTexIndex);
-        }
-        else
-        {
-            PopulateDrawCommands(GraphicAdapterPrimary, cmdList, (RenderMode::Opaque));
-        }
-
-        cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::OpaqueAlphaDrop));
+        
+        cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::Opaque));
+        PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::Opaque);
+        
+        cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::Opaque));
+        PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::DynamicOpaque);
+        
+        cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::OpaqueAlphaDrop));
         PopulateDrawCommands(GraphicAdapterPrimary, cmdList, (RenderMode::OpaqueAlphaDrop));
-
-        cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Transparent));
+        
+        cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::Reflection));
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::SkyMap, dynamicCubeMap->GetSRV());
+        PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::Reflection);
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::SkyMap, srvTexturesMemory.data(), assets[GraphicAdapterPrimary].GetTextureIndex(L"skyTex"));
+        
+        cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::Transparent));
         PopulateDrawCommands(GraphicAdapterPrimary, cmdList, (RenderMode::Transparent));
 
         switch (pathMapShow)
         {
         case 1:
             {
-                cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap,
-                                                UseOnlyPrime
-                                                    ? shadowPathPrimeDevice->GetSrv()
-                                                    : &primeCopyShadowMapSRV);
-                cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Debug));
+                cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap,shadowPathPrimeDevice->GetSrv());
+                cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::Debug));
                 PopulateDrawCommands(GraphicAdapterPrimary, cmdList, (RenderMode::Debug));
                 break;
             }
         case 2:
             {
                 cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap, ambientPrimePath->AmbientMapSrv(), 0);
-                cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Debug));
+                cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::Debug));
                 PopulateDrawCommands(GraphicAdapterPrimary, cmdList, (RenderMode::Debug));
                 break;
             }
@@ -1456,7 +1470,8 @@ void HybridShadowApp::PopulateForwardPathCommands(const std::shared_ptr<GCommand
     }
 }
 
-void HybridShadowApp::PopulateDrawCommands(const GraphicsAdapter adapterIndex, const std::shared_ptr<GCommandList>& cmdList,
+void HybridCubeMapApp::PopulateDrawCommands(const GraphicsAdapter adapterIndex,
+                                           const std::shared_ptr<GCommandList>& cmdList,
                                            RenderMode type)
 {
     for (auto&& renderer : typedRenderer[adapterIndex][static_cast<int>(type)])
@@ -1465,20 +1480,8 @@ void HybridShadowApp::PopulateDrawCommands(const GraphicsAdapter adapterIndex, c
     }
 }
 
-void HybridShadowApp::PopulateDrawCommandsExcept(const GraphicsAdapter adapterIndex,
-                                                 const std::shared_ptr<GCommandList>& cmdList,
-                                                 RenderMode type,
-                                                 const Renderer* excluded)
-{
-    for (auto&& renderer : typedRenderer[adapterIndex][static_cast<int>(type)])
-    {
-        if (renderer.get() == excluded) continue;
-        renderer->Draw(cmdList);
-    }
-}
-
-void HybridShadowApp::PopulateDrawQuadCommand(const std::shared_ptr<GCommandList>& cmdList,
-                                              GTexture& renderTarget, GDescriptor* rtvMemory, const UINT offsetRTV)
+void HybridCubeMapApp::PopulateDrawQuadCommand(const std::shared_ptr<GCommandList>& cmdList,
+                                              const GTexture& renderTarget, const GDescriptor* rtvMemory, const UINT offsetRTV)
 {
     cmdList->SetViewports(&fullViewport, 1);
     cmdList->SetScissorRects(&fullRect, 1);
@@ -1491,14 +1494,14 @@ void HybridShadowApp::PopulateDrawQuadCommand(const std::shared_ptr<GCommandList
 
     cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap, antiAliasingPrimePath->GetSRV());
 
-    cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Quad));
+    cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::Quad));
     PopulateDrawCommands(GraphicAdapterPrimary, cmdList, (RenderMode::Quad));
 
     cmdList->TransitionBarrier(renderTarget, D3D12_RESOURCE_STATE_PRESENT);
     cmdList->FlushResourceBarriers();
 }
 
-void HybridShadowApp::PopulateCopyResource(const std::shared_ptr<GCommandList>& cmdList, const GResource& srcResource,
+void HybridCubeMapApp::PopulateCopyResource(const std::shared_ptr<GCommandList>& cmdList, const GResource& srcResource,
                                            const GResource& dstResource)
 {
     cmdList->CopyResource(dstResource, srcResource);
@@ -1509,7 +1512,7 @@ void HybridShadowApp::PopulateCopyResource(const std::shared_ptr<GCommandList>& 
 }
 
 
-void HybridShadowApp::Draw(const GameTimer& gt)
+void HybridCubeMapApp::Draw(const GameTimer& gt)
 {
     if (isResizing) return;
 
@@ -1524,40 +1527,20 @@ void HybridShadowApp::Draw(const GameTimer& gt)
         {
             const auto shadowMapSecondCmdList = secondRenderQueue->GetCommandList();
             shadowMapSecondCmdList->EndQuery(timestampHeapIndex);
-            PopulateShadowMapCommands(GraphicAdapterSecond, shadowMapSecondCmdList);
+            PopulateDynamicCubeMapCommands(GraphicAdapterSecond, shadowMapSecondCmdList);
             shadowMapSecondCmdList->EndQuery(timestampHeapIndex + 1);
             shadowMapSecondCmdList->ResolveQuery(timestampHeapIndex, 2, timestampHeapIndex * sizeof(UINT64));
-            currentFrameResource->SecondRenderFenceValue = secondRenderQueue->
-                ExecuteCommandList(shadowMapSecondCmdList);
-            secondRenderQueue->Signal(secondFence, currentFrameResource->SecondRenderFenceValue);
-        }
-
-        auto copyPrimeQueue = devices[GraphicAdapterPrimary]->GetCommandQueue(GQueueType::Copy);
-        if (currentFrameResource->PrimeCopyFenceValue == 0 || copyPrimeQueue->IsFinish(
-            currentFrameResource->PrimeCopyFenceValue))
-        {
-            copyPrimeQueue->Wait(secondFence, currentFrameResource->SecondRenderFenceValue);
-            const auto copyShadowMapCmdList = copyPrimeQueue->GetCommandList();
-            PopulateShadowMapCommands(GraphicAdapterPrimary, copyShadowMapCmdList);
-            currentFrameResource->PrimeCopyFenceValue = copyPrimeQueue->ExecuteCommandList(copyShadowMapCmdList);
-            copyPrimeQueue->Signal(primeFence, currentFrameResource->PrimeCopyFenceValue);
+            currentFrameResource->SecondRenderFenceValue = secondRenderQueue->ExecuteCommandList(shadowMapSecondCmdList);
         }
     }
 
     auto primeRenderQueue = devices[GraphicAdapterPrimary]->GetCommandQueue(GQueueType::Graphics);
-    if (!UseOnlyPrime && currentFrameResource->PrimeCopyFenceValue != 0)
-    {
-        primeRenderQueue->Wait(primeFence, currentFrameResource->PrimeCopyFenceValue);
-    }
     auto primeCmdList = primeRenderQueue->GetCommandList();
     primeCmdList->EndQuery(timestampHeapIndex);
     PopulateNormalMapCommands(primeCmdList);
     PopulateAmbientMapCommands(primeCmdList);
-    if (UseOnlyPrime)
-    {
-        PopulateShadowMapCommands(GraphicAdapterPrimary, primeCmdList);
-    }
-    PopulateDynamicCubeMapCommands(primeCmdList);
+    PopulateShadowMapCommands(GraphicAdapterPrimary, primeCmdList);
+    PopulateDynamicCubeMapCommands(GraphicAdapterPrimary, primeCmdList);
     PopulateForwardPathCommands(primeCmdList);
     PopulateDrawQuadCommand(primeCmdList, MainWindow->GetCurrentBackBuffer(),
                             &currentFrameResource->BackBufferRTVMemory, 0);
@@ -1571,7 +1554,7 @@ void HybridShadowApp::Draw(const GameTimer& gt)
     currentFrameResourceIndex = MainWindow->Present();
 }
 
-void HybridShadowApp::OnResize()
+void HybridCubeMapApp::OnResize()
 {
     D3DApp::OnResize();
 
@@ -1615,14 +1598,14 @@ void HybridShadowApp::OnResize()
     currentFrameResourceIndex = MainWindow->GetCurrentBackBufferIndex();
 }
 
-bool HybridShadowApp::InitMainWindow()
+bool HybridCubeMapApp::InitMainWindow()
 {
     MainWindow = CreateRenderWindow(devices[GraphicAdapterPrimary], mainWindowCaption, 1920, 1080, false);
     logQueue.Push(std::wstring(L"\nInit Window"));
     return true;
 }
 
-int HybridShadowApp::Run()
+int HybridCubeMapApp::Run()
 {
     MSG msg = {nullptr};
 
@@ -1670,7 +1653,7 @@ int HybridShadowApp::Run()
     return static_cast<int>(msg.wParam);
 }
 
-void HybridShadowApp::Flush()
+void HybridCubeMapApp::Flush()
 {
     for (auto&& device : devices)
     {
@@ -1678,135 +1661,133 @@ void HybridShadowApp::Flush()
     }
 }
 
-LRESULT HybridShadowApp::MsgProc(const HWND hwnd, const UINT msg, const WPARAM wParam, const LPARAM lParam)
+LRESULT HybridCubeMapApp::MsgProc(const HWND hwnd, const UINT msg, const WPARAM wParam, const LPARAM lParam)
 {
-
     switch (msg)
     {
     case WM_KEYUP:
-    {
-        auto keycode = static_cast<char>(wParam);
-        keyboard.OnKeyReleased(keycode);
-        return 0;
-    }
-    case WM_INPUT:
-    {
-        UINT dataSize;
-        GetRawInputData(reinterpret_cast<HRAWINPUT>(lParam), RID_INPUT, nullptr, &dataSize,
-            sizeof(RAWINPUTHEADER));
-        //Need to populate data size first
-
-        if (dataSize > 0)
         {
-            auto rawdata = std::make_unique<BYTE[]>(dataSize);
-            if (GetRawInputData(reinterpret_cast<HRAWINPUT>(lParam), RID_INPUT, rawdata.get(), &dataSize,
-                sizeof(RAWINPUTHEADER)) == dataSize)
+            auto keycode = static_cast<char>(wParam);
+            keyboard.OnKeyReleased(keycode);
+            return 0;
+        }
+    case WM_INPUT:
+        {
+            UINT dataSize;
+            GetRawInputData(reinterpret_cast<HRAWINPUT>(lParam), RID_INPUT, nullptr, &dataSize,
+                            sizeof(RAWINPUTHEADER));
+            //Need to populate data size first
+
+            if (dataSize > 0)
             {
-                auto raw = reinterpret_cast<RAWINPUT*>(rawdata.get());
-                if (raw->header.dwType == RIM_TYPEMOUSE)
+                auto rawdata = std::make_unique<BYTE[]>(dataSize);
+                if (GetRawInputData(reinterpret_cast<HRAWINPUT>(lParam), RID_INPUT, rawdata.get(), &dataSize,
+                                    sizeof(RAWINPUTHEADER)) == dataSize)
                 {
-                    mouse.OnMouseMoveRaw(raw->data.mouse.lLastX, raw->data.mouse.lLastY);
+                    auto raw = reinterpret_cast<RAWINPUT*>(rawdata.get());
+                    if (raw->header.dwType == RIM_TYPEMOUSE)
+                    {
+                        mouse.OnMouseMoveRaw(raw->data.mouse.lLastX, raw->data.mouse.lLastY);
+                    }
                 }
             }
-        }
 
-        return DefWindowProc(hwnd, msg, wParam, lParam);
-    }
+            return DefWindowProc(hwnd, msg, wParam, lParam);
+        }
     //Mouse Messages
     case WM_MOUSEMOVE:
-    {
-        int x = LOWORD(lParam);
-        int y = HIWORD(lParam);
-        mouse.OnMouseMove(x, y);
-        return 0;
-    }
+        {
+            int x = LOWORD(lParam);
+            int y = HIWORD(lParam);
+            mouse.OnMouseMove(x, y);
+            return 0;
+        }
     case WM_LBUTTONDOWN:
-    {
-        int x = LOWORD(lParam);
-        int y = HIWORD(lParam);
-        mouse.OnLeftPressed(x, y);
-        return 0;
-    }
+        {
+            int x = LOWORD(lParam);
+            int y = HIWORD(lParam);
+            mouse.OnLeftPressed(x, y);
+            return 0;
+        }
     case WM_RBUTTONDOWN:
-    {
-        int x = LOWORD(lParam);
-        int y = HIWORD(lParam);
-        mouse.OnRightPressed(x, y);
-        return 0;
-    }
+        {
+            int x = LOWORD(lParam);
+            int y = HIWORD(lParam);
+            mouse.OnRightPressed(x, y);
+            return 0;
+        }
     case WM_MBUTTONDOWN:
-    {
-        int x = LOWORD(lParam);
-        int y = HIWORD(lParam);
-        mouse.OnMiddlePressed(x, y);
-        return 0;
-    }
+        {
+            int x = LOWORD(lParam);
+            int y = HIWORD(lParam);
+            mouse.OnMiddlePressed(x, y);
+            return 0;
+        }
     case WM_LBUTTONUP:
-    {
-        int x = LOWORD(lParam);
-        int y = HIWORD(lParam);
-        mouse.OnLeftReleased(x, y);
-        return 0;
-    }
+        {
+            int x = LOWORD(lParam);
+            int y = HIWORD(lParam);
+            mouse.OnLeftReleased(x, y);
+            return 0;
+        }
     case WM_RBUTTONUP:
-    {
-        int x = LOWORD(lParam);
-        int y = HIWORD(lParam);
-        mouse.OnRightReleased(x, y);
-        return 0;
-    }
+        {
+            int x = LOWORD(lParam);
+            int y = HIWORD(lParam);
+            mouse.OnRightReleased(x, y);
+            return 0;
+        }
     case WM_MBUTTONUP:
-    {
-        int x = LOWORD(lParam);
-        int y = HIWORD(lParam);
-        mouse.OnMiddleReleased(x, y);
-        return 0;
-    }
+        {
+            int x = LOWORD(lParam);
+            int y = HIWORD(lParam);
+            mouse.OnMiddleReleased(x, y);
+            return 0;
+        }
     case WM_MOUSEWHEEL:
-    {
-        int x = LOWORD(lParam);
-        int y = HIWORD(lParam);
-        if (GET_WHEEL_DELTA_WPARAM(wParam) > 0)
         {
-            mouse.OnWheelUp(x, y);
+            int x = LOWORD(lParam);
+            int y = HIWORD(lParam);
+            if (GET_WHEEL_DELTA_WPARAM(wParam) > 0)
+            {
+                mouse.OnWheelUp(x, y);
+            }
+            else if (GET_WHEEL_DELTA_WPARAM(wParam) < 0)
+            {
+                mouse.OnWheelDown(x, y);
+            }
+            return 0;
         }
-        else if (GET_WHEEL_DELTA_WPARAM(wParam) < 0)
-        {
-            mouse.OnWheelDown(x, y);
-        }
-        return 0;
-    }
 
     case WM_KEYDOWN:
-    {
-        auto keycode = static_cast<char>(wParam);
-        if (keyboard.IsKeysAutoRepeat())
         {
-            keyboard.OnKeyPressed(keycode);
-        }
-        else
-        {
-            const bool wasPressed = lParam & 0x40000000;
-            if (!wasPressed)
+            auto keycode = static_cast<char>(wParam);
+            if (keyboard.IsKeysAutoRepeat())
             {
                 keyboard.OnKeyPressed(keycode);
             }
+            else
+            {
+                const bool wasPressed = lParam & 0x40000000;
+                if (!wasPressed)
+                {
+                    keyboard.OnKeyPressed(keycode);
+                }
+            }
+
+
+            return 0;
         }
-
-       
-
-        return 0;
-    }
     }
 
     return D3DApp::MsgProc(hwnd, msg, wParam, lParam);
 }
 
-std::array<PassConstants, HybridShadowApp::DynamicCubeMapFaceCount> HybridShadowApp::BuildCubeFacePassCBs(
+std::array<PassConstants, HybridCubeMapApp::DynamicCubeMapFaceCount> HybridCubeMapApp::BuildCubeFacePassCBs(
     const Vector3& center) const
 {
-    const float nearZ = 0.1f;
-    const float farZ = 500.0f;
+    constexpr float nearZ = 0.1f;
+    constexpr float farZ = 500.0f;
 
     Matrix proj = XMMatrixPerspectiveFovLH(0.5f * XM_PI, 1.0f, nearZ, farZ);
 
@@ -1867,68 +1848,282 @@ std::array<PassConstants, HybridShadowApp::DynamicCubeMapFaceCount> HybridShadow
     return out;
 }
 
-void HybridShadowApp::PopulateDynamicCubeMapCommands(const std::shared_ptr<GCommandList>& cmdList)
+void HybridCubeMapApp::PopulateDynamicCubeMapCommands(const GraphicsAdapter adapter,
+                                                     const std::shared_ptr<GCommandList>& cmdList)
 {
-    if (dynamicCubeMap == nullptr) return;
-    if (mirrorSphereTransform == nullptr) return;
-
-    Vector3 center = mirrorSphereTransform->GetWorldPosition();
-
-    cmdList->SetDescriptorsHeap(&srvTexturesMemory[GraphicAdapterPrimary]);
-    cmdList->SetRootSignature(*primeDeviceSignature.get());
-
-    cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(), D3D12_RESOURCE_STATE_RENDER_TARGET);
-    cmdList->TransitionBarrier(dynamicCubeMap->GetDepthMap(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
-    cmdList->FlushResourceBarriers();
-
-    auto vp = dynamicCubeMap->GetViewport();
-    auto rect = dynamicCubeMap->GetScissorRect();
-    cmdList->SetViewports(&vp, 1);
-    cmdList->SetScissorRects(&rect, 1);
-
-    cmdList->SetRootShaderResourceView(StandardShaderSlot::MaterialData,
-                                       *currentFrameResource->MaterialBuffers[GraphicAdapterPrimary]);
-    cmdList->SetRootDescriptorTable(StandardShaderSlot::TexturesMap, &srvTexturesMemory[GraphicAdapterPrimary]);
-    cmdList->SetRootDescriptorTable(StandardShaderSlot::ShadowMap,
-                                    UseOnlyPrime ? shadowPathPrimeDevice->GetSrv() : &primeCopyShadowMapSRV);
-
-    auto whiteSsao = assets[GraphicAdapterPrimary].GetTextureIndex(L"white1x1Tex");
-    cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap,
-                                    &srvTexturesMemory[GraphicAdapterPrimary],
-                                    whiteSsao);
-    cmdList->SetRootDescriptorTable(StandardShaderSlot::SkyMap,
-                                    &srvTexturesMemory[GraphicAdapterPrimary],
-                                    skyCubeMapTexIndex);
-
-    auto cubePasses = BuildCubeFacePassCBs(center);
-
-    for (UINT face = 0; face < DynamicCubeMapFaceCount; ++face)
+    if (UseOnlyPrime)
     {
-        UINT passIndex = DynamicCubeMapFirstPassIndex + face;
-        currentFrameResource->PrimePassConstantUploadBuffer->CopyData(passIndex, cubePasses[face]);
-        cmdList->SetRootConstantBufferView(StandardShaderSlot::CameraData,
-                                           *currentFrameResource->PrimePassConstantUploadBuffer,
-                                           passIndex);
+        if (dynamicCubeMap == nullptr) return;
+        if (mirrorSphereTransform == nullptr) return;
 
-        cmdList->ClearRenderTarget(dynamicCubeMap->GetRTV(), face, Colors::Black);
-        cmdList->ClearDepthStencil(dynamicCubeMap->GetDSV(), 0,
-                                   D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0);
-        cmdList->SetRenderTargets(1, dynamicCubeMap->GetRTV(), face, dynamicCubeMap->GetDSV());
+        Vector3 center = mirrorSphereTransform->GetWorldPosition();
 
-        cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::SkyBox));
-        PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::SkyBox);
+        cmdList->SetDescriptorsHeap(&srvTexturesMemory[GraphicAdapterPrimary]);
+        cmdList->SetRootSignature(*primeDeviceSignature.get());       
 
-        cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Opaque));
-        PopulateDrawCommandsExcept(GraphicAdapterPrimary, cmdList, RenderMode::Opaque, mirrorSphereRenderer.get());
+        auto vp = dynamicCubeMap->GetViewport();
+        auto rect = dynamicCubeMap->GetScissorRect();
+        cmdList->SetViewports(&vp, 1);
+        cmdList->SetScissorRects(&rect, 1);
 
-        cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::OpaqueAlphaDrop));
-        PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::OpaqueAlphaDrop);
+        cmdList->SetGraphicsRootShaderResourceView(StandardShaderSlot::MaterialData,
+                                                   *currentFrameResource->MaterialBuffers[GraphicAdapterPrimary]);
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::TexturesMap, &srvTexturesMemory[GraphicAdapterPrimary]);
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::ShadowMap, shadowPathPrimeDevice->GetSrv());
 
-        cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Transparent));
-        PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::Transparent);
+        auto whiteSsao = assets[GraphicAdapterPrimary].GetTextureIndex(L"white1x1Tex");
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap,
+                                        &srvTexturesMemory[GraphicAdapterPrimary],
+                                        whiteSsao);
+
+        auto cubePasses = BuildCubeFacePassCBs(center);
+
+        cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        cmdList->TransitionBarrier(dynamicCubeMap->GetDepthMap(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        cmdList->FlushResourceBarriers();
+        
+        for (UINT face = 0; face < DynamicCubeMapFaceCount; ++face)
+        {
+            UINT passIndex = DynamicCubeMapFirstPassIndex + face;
+            currentFrameResource->PrimePassConstantUploadBuffer->CopyData(passIndex, cubePasses[face]);
+            cmdList->SetRootConstantBufferView(StandardShaderSlot::CameraData,
+                                               *currentFrameResource->PrimePassConstantUploadBuffer,
+                                               passIndex);
+
+            cmdList->ClearRenderTarget(&dynamicCubeMap->GetRTV(face), 0, Colors::Black);
+            cmdList->ClearDepthStencil(dynamicCubeMap->GetDSV(), 0,
+                                       D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0);
+            cmdList->SetRenderTargets(1, &dynamicCubeMap->GetRTV(face), 0, dynamicCubeMap->GetDSV());
+
+            cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::SkyBox));
+            PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::SkyBox);
+
+            cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::Opaque));
+            PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::Opaque);
+            
+            cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::Opaque));
+            PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::DynamicOpaque);
+
+            cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::OpaqueAlphaDrop));
+            PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::OpaqueAlphaDrop);
+            
+            cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::Reflection));
+            cmdList->SetRootDescriptorTable(StandardShaderSlot::SkyMap, dynamicCubeMap->GetSRV());
+            PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::Reflection);
+            cmdList->SetRootDescriptorTable(StandardShaderSlot::SkyMap, srvTexturesMemory.data(),
+                                            assets[GraphicAdapterPrimary].GetTextureIndex(L"skyTex"));
+
+            cmdList->SetPipelineState(*primePipelineResources.GetPSO(RenderMode::Transparent));
+            PopulateDrawCommands(GraphicAdapterPrimary, cmdList, RenderMode::Transparent);
+        }
+
+        cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(), D3D12_RESOURCE_STATE_GENERIC_READ);
+        cmdList->TransitionBarrier(dynamicCubeMap->GetDepthMap(), D3D12_RESOURCE_STATE_GENERIC_READ);
+        cmdList->FlushResourceBarriers();
     }
+    else
+    {
+        if (adapter == GraphicAdapterPrimary)
+        {
+            cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(), D3D12_RESOURCE_STATE_COMMON);
+            cmdList->FlushResourceBarriers();
+            for (UINT face = 0; face < CubeMapRenderTarget::FaceCount; ++face)
+            {
+                cmdList->CopyResourceToCubeMap(dynamicCubeMap->GetCubeMap(),
+                                               crossAdapterCubeMaps[face]->GetPrimeResource(), face);
+            }
+            cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(), D3D12_RESOURCE_STATE_GENERIC_READ);
+            cmdList->FlushResourceBarriers();
+        }
+        else
+        {
+            Vector3 center = mirrorSphereTransform->GetWorldPosition();
 
-    cmdList->TransitionBarrier(dynamicCubeMap->GetCubeMap(), D3D12_RESOURCE_STATE_GENERIC_READ);
-    cmdList->FlushResourceBarriers();
+            cmdList->SetDescriptorsHeap(&srvTexturesMemory[GraphicAdapterSecond]);
+            cmdList->SetRootSignature(*secondDeviceSignature.get());
+            
+            if (!isBaked)
+            {
+                auto vp = bakedCubeMapSecond->GetViewport();
+                auto rect = bakedCubeMapSecond->GetScissorRect();
+                cmdList->SetViewports(&vp, 1);
+                cmdList->SetScissorRects(&rect, 1);
+                
+                cmdList->SetRootShaderResourceView(StandardShaderSlot::MaterialData,
+                                   *currentFrameResource->MaterialBuffers[GraphicAdapterSecond]);
+                cmdList->SetRootDescriptorTable(StandardShaderSlot::TexturesMap, &srvTexturesMemory[GraphicAdapterSecond]);
+
+
+                auto whiteSsao = assets[GraphicAdapterSecond].GetTextureIndex(L"white1x1Tex");
+
+                cmdList->SetRootDescriptorTable(StandardShaderSlot::ShadowMap, &srvTexturesMemory[GraphicAdapterSecond],
+                    whiteSsao);
+
+                cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap,
+                                                &srvTexturesMemory[GraphicAdapterSecond],
+                                                whiteSsao);
+
+                auto cubePasses = BuildCubeFacePassCBs(center);
+                
+                cmdList->TransitionBarrier(bakedCubeMapSecond->GetCubeMap(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+                cmdList->TransitionBarrier(bakedCubeMapSecond->GetDepthMap(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+                cmdList->FlushResourceBarriers();
+                
+                for (UINT face = 0; face < CubeMapRenderTarget::FaceCount; ++face)
+                {
+                    UINT passIndex = BakedCubeMapFirstPassIndex + face;
+                    currentFrameResource->SecondPassConstantUploadBuffer->CopyData(passIndex, cubePasses[face]);
+                    cmdList->SetRootConstantBufferView(StandardShaderSlot::CameraData,
+                                                       *currentFrameResource->SecondPassConstantUploadBuffer,
+                                                       passIndex);                
+
+                    cmdList->ClearRenderTarget(&bakedCubeMapSecond->GetRTV(face), 0, Colors::Black);
+                    cmdList->ClearDepthStencil(&bakedCubeMapSecond->GetDSV(face), 0,
+                                               D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0);
+                    cmdList->SetRenderTargets(1, &bakedCubeMapSecond->GetRTV(face), 0, &bakedCubeMapSecond->GetDSV(face));
+
+                    cmdList->SetPipelineState(*secondPipelineResources.GetPSO(RenderMode::SkyBox));
+                    PopulateDrawCommands(GraphicAdapterSecond, cmdList, RenderMode::SkyBox);
+                
+                    cmdList->SetPipelineState(*secondPipelineResources.GetPSO(RenderMode::Opaque));
+                    PopulateDrawCommands(GraphicAdapterSecond, cmdList, RenderMode::Opaque);
+
+                    cmdList->SetPipelineState(*secondPipelineResources.GetPSO(RenderMode::OpaqueAlphaDrop));
+                    PopulateDrawCommands(GraphicAdapterSecond, cmdList, RenderMode::OpaqueAlphaDrop);
+
+                    cmdList->SetPipelineState(*secondPipelineResources.GetPSO(RenderMode::Transparent));
+                    PopulateDrawCommands(GraphicAdapterSecond, cmdList, RenderMode::Transparent);
+                }
+                cmdList->TransitionBarrier(bakedCubeMapSecond->GetCubeMap(), D3D12_RESOURCE_STATE_GENERIC_READ);
+                cmdList->TransitionBarrier(bakedCubeMapSecond->GetDepthMap(), D3D12_RESOURCE_STATE_GENERIC_READ);
+                cmdList->FlushResourceBarriers();
+                isBaked = true;
+            }
+
+            
+            auto vp = dynamicCubeMap->GetViewport();
+            auto rect = dynamicCubeMap->GetScissorRect();
+            cmdList->SetViewports(&vp, 1);
+            cmdList->SetScissorRects(&rect, 1);
+
+            cmdList->SetRootShaderResourceView(StandardShaderSlot::MaterialData,
+                                               *currentFrameResource->MaterialBuffers[GraphicAdapterSecond]);
+            cmdList->SetRootDescriptorTable(StandardShaderSlot::TexturesMap, &srvTexturesMemory[GraphicAdapterSecond]);
+            
+            auto whiteSsao = assets[GraphicAdapterSecond].GetTextureIndex(L"white1x1Tex");
+
+            cmdList->SetRootDescriptorTable(StandardShaderSlot::ShadowMap, &srvTexturesMemory[GraphicAdapterSecond],
+                whiteSsao);
+
+            cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap,
+                                            &srvTexturesMemory[GraphicAdapterSecond],
+                                            whiteSsao);
+
+            auto cubePasses = BuildCubeFacePassCBs(center);
+            
+            for (UINT face = 0; face < CubeMapRenderTarget::FaceCount; ++face)
+            {
+                UINT passIndex = BakedCubeMapFirstPassIndex + face;
+                currentFrameResource->SecondPassConstantUploadBuffer->CopyData(passIndex, cubePasses[face]);
+                cmdList->SetRootConstantBufferView(StandardShaderSlot::CameraData,
+                                                   *currentFrameResource->SecondPassConstantUploadBuffer,
+                                                   passIndex);                
+                
+                cmdList->CopyResourceFromCubeMap(dynamicCubeMapFaceColor,
+                  bakedCubeMapSecond->GetCubeMap(),
+                  face);
+                
+                cmdList->CopyResourceFromCubeMap(dynamicCubeMapFaceDepth,
+                                  bakedCubeMapSecond->GetDepthMap(),
+                                  face);
+                
+                cmdList->TransitionBarrier(dynamicCubeMapFaceColor, D3D12_RESOURCE_STATE_RENDER_TARGET);
+                cmdList->TransitionBarrier(dynamicCubeMapFaceDepth, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+                cmdList->FlushResourceBarriers();
+                
+                cmdList->SetRenderTargets(1, &dynamicCubeMapFaceRtv, 0, &dynamicCubeMapFaceDsv);
+                
+                cmdList->SetPipelineState(*secondPipelineResources.GetPSO(RenderMode::Opaque));
+                PopulateDrawCommands(GraphicAdapterSecond, cmdList, RenderMode::DynamicOpaque);
+                
+                cmdList->CopyResource(crossAdapterCubeMaps[face]->GetSharedResource(), dynamicCubeMapFaceColor);
+            }
+
+            cmdList->TransitionBarrier(dynamicCubeMapFaceColor, D3D12_RESOURCE_STATE_GENERIC_READ);
+            cmdList->TransitionBarrier(dynamicCubeMapFaceDepth, D3D12_RESOURCE_STATE_GENERIC_READ);
+            cmdList->FlushResourceBarriers();
+
+        }
+    }
 }
 
+void HybridCubeMapApp::CreateDynamicTextures(const GraphicsAdapter adapter)
+{
+    DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    DXGI_FORMAT depthFormat = DXGI_FORMAT_D32_FLOAT;
+    
+    D3D12_RESOURCE_DESC colorDesc{};
+    colorDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    colorDesc.Alignment = 0;
+    colorDesc.Width = BakedCubeMapSize;
+    colorDesc.Height = BakedCubeMapSize;
+    colorDesc.DepthOrArraySize = 1;
+    colorDesc.MipLevels = 1;
+    colorDesc.Format = format;
+    colorDesc.SampleDesc.Count = 1;
+    colorDesc.SampleDesc.Quality = 0;
+    colorDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    colorDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+    constexpr float clear[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    const CD3DX12_CLEAR_VALUE clearColor(format, clear);
+
+    dynamicCubeMapFaceColor = GTexture(devices[adapter], colorDesc, L"DynamicCubeMapFaceColor", TextureUsage::RenderTarget, &clearColor);
+
+    D3D12_RESOURCE_DESC depthDesc{};
+    depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    depthDesc.Alignment = 0;
+    depthDesc.Width = BakedCubeMapSize;
+    depthDesc.Height = BakedCubeMapSize;
+    depthDesc.DepthOrArraySize = 1;
+    depthDesc.MipLevels = 1;
+    depthDesc.Format = depthFormat;
+    depthDesc.SampleDesc.Count = 1;
+    depthDesc.SampleDesc.Quality = 0;
+    depthDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+    D3D12_CLEAR_VALUE clearDepth{};
+    clearDepth.Format = depthFormat;
+    clearDepth.DepthStencil.Depth = 1.0f;
+    clearDepth.DepthStencil.Stencil = 0;
+
+    dynamicCubeMapFaceDepth = GTexture(devices[adapter], depthDesc, L"DynamicCubeMapFaceDepth", TextureUsage::Depth, &clearDepth);
+    
+    dynamicCubeMapFaceRtv = devices[adapter]->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1);
+    dynamicCubeMapFaceDsv = devices[adapter]->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1);
+    dynamicCubeMapFaceSrv = devices[adapter]->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+    
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.Format = format;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MostDetailedMip = 0;
+    srvDesc.Texture2D.MipLevels = 1;
+    srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+    dynamicCubeMapFaceColor.CreateShaderResourceView(&srvDesc, &dynamicCubeMapFaceSrv);
+
+    D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
+    rtvDesc.Format = format;
+    rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+    rtvDesc.Texture2D.MipSlice = 0;
+    rtvDesc.Texture2D.PlaneSlice = 0;
+    dynamicCubeMapFaceColor.CreateRenderTargetView(&rtvDesc, &dynamicCubeMapFaceRtv);
+    
+    D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+    dsvDesc.Format = depthFormat;
+    dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+    dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
+    dsvDesc.Texture2D.MipSlice = 0;
+    dynamicCubeMapFaceDepth.CreateDepthStencilView(&dsvDesc, &dynamicCubeMapFaceDsv);
+}

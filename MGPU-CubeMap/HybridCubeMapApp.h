@@ -3,6 +3,7 @@
 #include <array>
 
 #include "AssetsLoader.h"
+#include "BakedCubeMapRenderTarget.h"
 #include "d3dApp.h"
 #include "GDeviceFactory.h"
 #include "GModel.h"
@@ -23,13 +24,13 @@ using namespace PEPEngine;
 using namespace Graphics;
 
 
-class HybridShadowApp :
+class HybridCubeMapApp :
     public Common::D3DApp
 {
 public:
-    HybridShadowApp(HINSTANCE hInstance);
+    HybridCubeMapApp(HINSTANCE hInstance);
 
-    ~HybridShadowApp() override;;
+    ~HybridCubeMapApp() override;;
 
     bool Initialize() override;
 
@@ -49,8 +50,8 @@ protected:
     void inline PopulateForwardPathCommands(const std::shared_ptr<GCommandList>& cmdList);
     void inline PopulateDrawCommands(GraphicsAdapter adapterIndex, const std::shared_ptr<GCommandList>& cmdList,
                                      RenderMode type);
-    void inline PopulateDrawQuadCommand(const std::shared_ptr<GCommandList>& cmdList, GTexture& renderTarget,
-                                        GDescriptor* rtvMemory, UINT
+    void inline PopulateDrawQuadCommand(const std::shared_ptr<GCommandList>& cmdList, const GTexture& renderTarget,
+                                        const GDescriptor* rtvMemory, UINT
                                         offsetRTV);
     void inline PopulateCopyResource(const std::shared_ptr<GCommandList>& cmdList, const GResource& srcResource,
                                      const GResource& dstResource);
@@ -62,7 +63,7 @@ protected:
     bool InitMainWindow() override;;
 
 private:
-    void Flush() override;;
+    void Flush() override;
     void inline InitDevices();
     void inline InitFrameResource();
     void inline InitRootSignature();
@@ -105,17 +106,22 @@ private:
 
     std::shared_ptr<GRootSignature> primeDeviceSignature;
     std::shared_ptr<GRootSignature> ssaoPrimeRootSignature;
-    std::shared_ptr<GRootSignature> secondDeviceShadowMapSignature;
+    std::shared_ptr<GRootSignature> ssaoSecondRootSignature;
+    std::shared_ptr<GRootSignature> secondDeviceSignature;
 
-    RenderModeFactory defaultPrimePipelineResources;
+    RenderModeFactory primePipelineResources;
+    RenderModeFactory secondPipelineResources;
 
     std::shared_ptr<GraphicPSO> shadowMapPSOSecondDevice;
     std::shared_ptr<GCrossAdapterResource> crossAdapterShadowMap;
-    GTexture primeCopyShadowMap;
-    GDescriptor primeCopyShadowMapSRV;
+    std::array<std::shared_ptr<GCrossAdapterResource>, 6> crossAdapterCubeMaps;
+
     std::shared_ptr<ShadowMap> shadowPathSecondDevice;
+    std::shared_ptr<ShadowMap> cubeMapSecondDevice;
 
     std::shared_ptr<ShadowMap> shadowPathPrimeDevice;
+    std::shared_ptr<ShadowMap> cubeMapPrimeDevice;
+    GDescriptor primeCopyCubeMapSRV;
 
 
     std::vector<D3D12_INPUT_ELEMENT_DESC> defaultInputLayout{};
@@ -152,13 +158,30 @@ private:
     Matrix mLightProj = Matrix::Identity;
     Matrix mShadowTransform = Matrix::Identity;
 
+    // new
     static constexpr UINT DynamicCubeMapFaceCount = 6;
     static constexpr UINT DynamicCubeMapFirstPassIndex = 2;
     static constexpr UINT DynamicCubeMapSize = 1024;
 
     std::shared_ptr<CubeMapRenderTarget> dynamicCubeMap = nullptr;
-    UINT dynamicCubeMapSrvIndex = 0;
-    UINT skyCubeMapTexIndex = 0;
+    std::shared_ptr<CubeMapRenderTarget> dynamicCubeMapSecond = nullptr;
+    
+    std::shared_ptr<BakedCubeMapRenderTarget> bakedCubeMapSecond = nullptr;
+    std::atomic<bool> isBaked = false;
+    static constexpr UINT BakedCubeMapFaceCount = 6;
+    static constexpr UINT BakedCubeMapFirstPassIndex = 2;
+    static constexpr UINT BakedCubeMapSize = 1024;
+    
+    GTexture dynamicCubeMapFaceColor; //= nullptr;
+    GTexture dynamicCubeMapFaceDepth; //= nullptr;
+    
+    GDescriptor dynamicCubeMapFaceSrv;
+    GDescriptor dynamicCubeMapFaceRtv;
+    GDescriptor dynamicCubeMapFaceDsv;
+    
+    void CreateDynamicTextures(const GraphicsAdapter adapter);
+    
+    // end of new
 
     std::shared_ptr<Renderer> mirrorSphereRenderer = nullptr;
     std::shared_ptr<Transform> mirrorSphereTransform = nullptr;
@@ -178,9 +201,7 @@ private:
     UINT pathMapShow = 0;
     //off, shadowMap, ssaoMap
     const UINT maxPathMap = 3;
-    void inline PopulateDynamicCubeMapCommands(const std::shared_ptr<GCommandList>& cmdList);
+    void inline PopulateDynamicCubeMapCommands(GraphicsAdapter adapter, const std::shared_ptr<GCommandList>& cmdList);
     std::array<PassConstants, DynamicCubeMapFaceCount> inline BuildCubeFacePassCBs(const Vector3& center) const;
-    void inline PopulateDrawCommandsExcept(GraphicsAdapter adapterIndex, const std::shared_ptr<GCommandList>& cmdList,
-                                           RenderMode type, const Renderer* excluded);
     LRESULT MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) override;
 };
