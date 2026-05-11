@@ -1,4 +1,4 @@
-#include "HybridShadowApp.h"
+#include "HybridCubeMapApp.h"
 
 #include <array>
 #include <filesystem>
@@ -22,15 +22,15 @@ using namespace PEPEngine;
 using namespace Utils;
 using namespace Graphics;
 
-HybridShadowApp::HybridShadowApp(const HINSTANCE hInstance) : D3DApp(hInstance), gpuTimes{}, fullRect()
+HybridCubeMapApp::HybridCubeMapApp(const HINSTANCE hInstance) : D3DApp(hInstance), gpuTimes{}, fullRect()
 {
     mSceneBounds.Center = Vector3(0.0f, 0.0f, 0.0f);
     mSceneBounds.Radius = 200;
 }
 
-HybridShadowApp::~HybridShadowApp()
+HybridCubeMapApp::~HybridCubeMapApp()
 {
-    HybridShadowApp::Flush();
+    HybridCubeMapApp::Flush();
 
     for (auto&& device : devices)
     {
@@ -44,7 +44,7 @@ HybridShadowApp::~HybridShadowApp()
     logThreadIsAlive = false;
 }
 
-void HybridShadowApp::InitDevices()
+void HybridCubeMapApp::InitDevices()
 {
     devices.resize(GraphicAdapterCount);
 
@@ -94,7 +94,7 @@ void HybridShadowApp::InitDevices()
             devices[GraphicAdapterSecond]->IsCrossAdapterTextureSupported()));
 }
 
-void HybridShadowApp::InitFrameResource()
+void HybridCubeMapApp::InitFrameResource()
 {
     for (int i = 0; i < globalCountFrameResources; ++i)
     {
@@ -105,7 +105,7 @@ void HybridShadowApp::InitFrameResource()
     logQueue.Push(std::wstring(L"\nInit FrameResource "));
 }
 
-void HybridShadowApp::InitRootSignature()
+void HybridCubeMapApp::InitRootSignature()
 {
     for (int i = 0; i < GraphicAdapterCount; ++i)
     {
@@ -200,7 +200,7 @@ void HybridShadowApp::InitRootSignature()
     }
 }
 
-void HybridShadowApp::InitPipeLineResource()
+void HybridCubeMapApp::InitPipeLineResource()
 {
     defaultInputLayout =
     {
@@ -270,7 +270,7 @@ void HybridShadowApp::InitPipeLineResource()
     shadowMapPSOSecondDevice->Initialize(devices[GraphicAdapterSecond]);
 }
 
-void HybridShadowApp::CreateMaterials()
+void HybridCubeMapApp::CreateMaterials()
 {
     auto seamless = std::make_shared<Material>(L"seamless", RenderMode::Opaque);
     seamless->FresnelR0 = Vector3(0.02f, 0.02f, 0.02f);
@@ -304,7 +304,7 @@ void HybridShadowApp::CreateMaterials()
     logQueue.Push(std::wstring(L"\nCreate Materials"));
 }
 
-void HybridShadowApp::InitSRVMemoryAndMaterials()
+void HybridCubeMapApp::InitSRVMemoryAndMaterials()
 {
     for (int i = 0; i < GraphicAdapterCount; ++i)
     {
@@ -327,7 +327,7 @@ void HybridShadowApp::InitSRVMemoryAndMaterials()
     ambientPrimePath->BuildDescriptors();
 }
 
-void HybridShadowApp::InitRenderPaths()
+void HybridCubeMapApp::InitRenderPaths()
 {
     auto commandQueue = devices[GraphicAdapterPrimary]->GetCommandQueue(GQueueType::Graphics);
     auto cmdList = commandQueue->GetCommandList();
@@ -381,7 +381,7 @@ void HybridShadowApp::InitRenderPaths()
     primeCopyCubeMapSRV = devices[GraphicAdapterPrimary]->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
-void HybridShadowApp::LoadStudyTexture()
+void HybridCubeMapApp::LoadStudyTexture()
 {
     auto queue = devices[GraphicAdapterPrimary]->GetCommandQueue(GQueueType::Compute);
 
@@ -455,7 +455,7 @@ void HybridShadowApp::LoadStudyTexture()
     logQueue.Push(std::wstring(L"\nLoad DDS Texture"));
 }
 
-void HybridShadowApp::LoadModels()
+void HybridCubeMapApp::LoadModels()
 {
     
         auto queue = devices[GraphicAdapterPrimary]->GetCommandQueue(GQueueType::Compute);
@@ -521,7 +521,7 @@ void HybridShadowApp::LoadModels()
     
 }
 
-void HybridShadowApp::MipMasGenerate()
+void HybridCubeMapApp::MipMasGenerate()
 {
     try
     {
@@ -579,7 +579,7 @@ void HybridShadowApp::MipMasGenerate()
     }
 }
 
-void HybridShadowApp::DublicateResource()
+void HybridCubeMapApp::DublicateResource()
 {
     for (int i = GraphicAdapterPrimary + 1; i < GraphicAdapterCount; ++i)
     {
@@ -662,7 +662,7 @@ void HybridShadowApp::DublicateResource()
     }
 }
 
-void HybridShadowApp::SortGO()
+void HybridCubeMapApp::SortGO()
 {
     for (auto&& item : gameObjects)
     {
@@ -680,13 +680,13 @@ void HybridShadowApp::SortGO()
     }
 }
 
-std::shared_ptr<Renderer> HybridShadowApp::CreateRenderer(const UINT deviceIndex, std::shared_ptr<GModel> model)
+std::shared_ptr<Renderer> HybridCubeMapApp::CreateRenderer(const UINT deviceIndex, std::shared_ptr<GModel> model)
 {
     auto renderer = std::make_shared<ModelRenderer>(devices[deviceIndex], model);
     return renderer;
 }
 
-void HybridShadowApp::AddMultiDeviceOpaqueRenderComponent(GameObject* object, const std::wstring& modelName,
+void HybridCubeMapApp::AddMultiDeviceOpaqueRenderComponent(GameObject* object, const std::wstring& modelName,
                                                           RenderMode psoType)
 {
     for (int i = 0; i < GraphicAdapterCount; ++i)
@@ -697,7 +697,7 @@ void HybridShadowApp::AddMultiDeviceOpaqueRenderComponent(GameObject* object, co
     }
 }
 
-void HybridShadowApp::CreateGO()
+void HybridCubeMapApp::CreateGO()
 {
     
     
@@ -885,7 +885,7 @@ void HybridShadowApp::CreateGO()
     logQueue.Push(std::wstring(L"\nFinish create GO"));
 }
 
-void HybridShadowApp::CalculateFrameStats()
+void HybridCubeMapApp::CalculateFrameStats()
 {
     static float minFps = std::numeric_limits<float>::max();
     static float minMspf = std::numeric_limits<float>::max();
@@ -986,7 +986,7 @@ void HybridShadowApp::CalculateFrameStats()
     }
 }
 
-void HybridShadowApp::LogWriting()
+void HybridCubeMapApp::LogWriting()
 {
     const std::filesystem::path filePath(
         L"PartShadow " + devices[0]->GetName() + L"+" + devices[1]->GetName() + L".txt");
@@ -1018,7 +1018,7 @@ void HybridShadowApp::LogWriting()
     fileSteam.close();
 }
 
-bool HybridShadowApp::Initialize()
+bool HybridCubeMapApp::Initialize()
 {
     InitDevices();
     InitMainWindow();
@@ -1059,7 +1059,7 @@ bool HybridShadowApp::Initialize()
     return true;
 }
 
-void HybridShadowApp::UpdateMaterials()
+void HybridCubeMapApp::UpdateMaterials()
 {
     for (int i = 0; i < GraphicAdapterCount; ++i)
     {
@@ -1074,7 +1074,7 @@ void HybridShadowApp::UpdateMaterials()
     }
 }
 
-void HybridShadowApp::Update(const GameTimer& gt)
+void HybridCubeMapApp::Update(const GameTimer& gt)
 {
     UINT olderIndex = currentFrameResourceIndex - 1 > globalCountFrameResources
                           ? 0
@@ -1142,7 +1142,7 @@ void HybridShadowApp::Update(const GameTimer& gt)
     UpdateSsaoCB(gt);
 }
 
-void HybridShadowApp::UpdateShadowTransform(const GameTimer& gt)
+void HybridCubeMapApp::UpdateShadowTransform(const GameTimer& gt)
 {
     // Only the first "main" light casts a shadow.
     Vector3 lightDir = mRotatedLightDirections[0];
@@ -1183,7 +1183,7 @@ void HybridShadowApp::UpdateShadowTransform(const GameTimer& gt)
     mShadowTransform = S;
 }
 
-void HybridShadowApp::UpdateShadowPassCB(const GameTimer& gt)
+void HybridCubeMapApp::UpdateShadowPassCB(const GameTimer& gt)
 {
     auto view = mLightView;
     auto proj = mLightProj;
@@ -1215,7 +1215,7 @@ void HybridShadowApp::UpdateShadowPassCB(const GameTimer& gt)
     currPassCB->CopyData(1, shadowPassCB);
 }
 
-void HybridShadowApp::UpdateMainPassCB(const GameTimer& gt)
+void HybridCubeMapApp::UpdateMainPassCB(const GameTimer& gt)
 {
     auto view = camera->GetViewMatrix();
     auto proj = camera->GetProjectionMatrix();
@@ -1278,7 +1278,7 @@ void HybridShadowApp::UpdateMainPassCB(const GameTimer& gt)
     }
 }
 
-void HybridShadowApp::UpdateSsaoCB(const GameTimer& gt)
+void HybridCubeMapApp::UpdateSsaoCB(const GameTimer& gt)
 {
     SsaoConstants ssaoCB;
 
@@ -1318,7 +1318,7 @@ void HybridShadowApp::UpdateSsaoCB(const GameTimer& gt)
     }
 }
 
-void HybridShadowApp::PopulateShadowMapCommands(const GraphicsAdapter adapter, std::shared_ptr<GCommandList> cmdList)
+void HybridCubeMapApp::PopulateShadowMapCommands(const GraphicsAdapter adapter, std::shared_ptr<GCommandList> cmdList)
 {
         cmdList->SetRootSignature(*primeDeviceSignature.get());
         cmdList->SetRootShaderResourceView(StandardShaderSlot::MaterialData,
@@ -1337,7 +1337,7 @@ void HybridShadowApp::PopulateShadowMapCommands(const GraphicsAdapter adapter, s
         cmdList->FlushResourceBarriers();    
 }
 
-void HybridShadowApp::PopulateNormalMapCommands(const std::shared_ptr<GCommandList>& cmdList)
+void HybridCubeMapApp::PopulateNormalMapCommands(const std::shared_ptr<GCommandList>& cmdList)
 {
     //Draw Normals
     {
@@ -1378,7 +1378,7 @@ void HybridShadowApp::PopulateNormalMapCommands(const std::shared_ptr<GCommandLi
     }
 }
 
-void HybridShadowApp::PopulateAmbientMapCommands(const std::shared_ptr<GCommandList>& cmdList)
+void HybridCubeMapApp::PopulateAmbientMapCommands(const std::shared_ptr<GCommandList>& cmdList)
 {
     //Draw Ambient
     {
@@ -1393,7 +1393,7 @@ void HybridShadowApp::PopulateAmbientMapCommands(const std::shared_ptr<GCommandL
     }
 }
 
-void HybridShadowApp::PopulateForwardPathCommands(const std::shared_ptr<GCommandList>& cmdList)
+void HybridCubeMapApp::PopulateForwardPathCommands(const std::shared_ptr<GCommandList>& cmdList)
 {
     //Forward Path with SSAA
     {
@@ -1470,7 +1470,7 @@ void HybridShadowApp::PopulateForwardPathCommands(const std::shared_ptr<GCommand
     }
 }
 
-void HybridShadowApp::PopulateDrawCommands(const GraphicsAdapter adapterIndex,
+void HybridCubeMapApp::PopulateDrawCommands(const GraphicsAdapter adapterIndex,
                                            const std::shared_ptr<GCommandList>& cmdList,
                                            RenderMode type)
 {
@@ -1480,7 +1480,7 @@ void HybridShadowApp::PopulateDrawCommands(const GraphicsAdapter adapterIndex,
     }
 }
 
-void HybridShadowApp::PopulateDrawQuadCommand(const std::shared_ptr<GCommandList>& cmdList,
+void HybridCubeMapApp::PopulateDrawQuadCommand(const std::shared_ptr<GCommandList>& cmdList,
                                               const GTexture& renderTarget, const GDescriptor* rtvMemory, const UINT offsetRTV)
 {
     cmdList->SetViewports(&fullViewport, 1);
@@ -1501,7 +1501,7 @@ void HybridShadowApp::PopulateDrawQuadCommand(const std::shared_ptr<GCommandList
     cmdList->FlushResourceBarriers();
 }
 
-void HybridShadowApp::PopulateCopyResource(const std::shared_ptr<GCommandList>& cmdList, const GResource& srcResource,
+void HybridCubeMapApp::PopulateCopyResource(const std::shared_ptr<GCommandList>& cmdList, const GResource& srcResource,
                                            const GResource& dstResource)
 {
     cmdList->CopyResource(dstResource, srcResource);
@@ -1512,7 +1512,7 @@ void HybridShadowApp::PopulateCopyResource(const std::shared_ptr<GCommandList>& 
 }
 
 
-void HybridShadowApp::Draw(const GameTimer& gt)
+void HybridCubeMapApp::Draw(const GameTimer& gt)
 {
     if (isResizing) return;
 
@@ -1554,7 +1554,7 @@ void HybridShadowApp::Draw(const GameTimer& gt)
     currentFrameResourceIndex = MainWindow->Present();
 }
 
-void HybridShadowApp::OnResize()
+void HybridCubeMapApp::OnResize()
 {
     D3DApp::OnResize();
 
@@ -1598,14 +1598,14 @@ void HybridShadowApp::OnResize()
     currentFrameResourceIndex = MainWindow->GetCurrentBackBufferIndex();
 }
 
-bool HybridShadowApp::InitMainWindow()
+bool HybridCubeMapApp::InitMainWindow()
 {
     MainWindow = CreateRenderWindow(devices[GraphicAdapterPrimary], mainWindowCaption, 1920, 1080, false);
     logQueue.Push(std::wstring(L"\nInit Window"));
     return true;
 }
 
-int HybridShadowApp::Run()
+int HybridCubeMapApp::Run()
 {
     MSG msg = {nullptr};
 
@@ -1653,7 +1653,7 @@ int HybridShadowApp::Run()
     return static_cast<int>(msg.wParam);
 }
 
-void HybridShadowApp::Flush()
+void HybridCubeMapApp::Flush()
 {
     for (auto&& device : devices)
     {
@@ -1661,7 +1661,7 @@ void HybridShadowApp::Flush()
     }
 }
 
-LRESULT HybridShadowApp::MsgProc(const HWND hwnd, const UINT msg, const WPARAM wParam, const LPARAM lParam)
+LRESULT HybridCubeMapApp::MsgProc(const HWND hwnd, const UINT msg, const WPARAM wParam, const LPARAM lParam)
 {
     switch (msg)
     {
@@ -1783,7 +1783,7 @@ LRESULT HybridShadowApp::MsgProc(const HWND hwnd, const UINT msg, const WPARAM w
     return D3DApp::MsgProc(hwnd, msg, wParam, lParam);
 }
 
-std::array<PassConstants, HybridShadowApp::DynamicCubeMapFaceCount> HybridShadowApp::BuildCubeFacePassCBs(
+std::array<PassConstants, HybridCubeMapApp::DynamicCubeMapFaceCount> HybridCubeMapApp::BuildCubeFacePassCBs(
     const Vector3& center) const
 {
     constexpr float nearZ = 0.1f;
@@ -1848,7 +1848,7 @@ std::array<PassConstants, HybridShadowApp::DynamicCubeMapFaceCount> HybridShadow
     return out;
 }
 
-void HybridShadowApp::PopulateDynamicCubeMapCommands(const GraphicsAdapter adapter,
+void HybridCubeMapApp::PopulateDynamicCubeMapCommands(const GraphicsAdapter adapter,
                                                      const std::shared_ptr<GCommandList>& cmdList)
 {
     if (UseOnlyPrime)
@@ -2057,7 +2057,7 @@ void HybridShadowApp::PopulateDynamicCubeMapCommands(const GraphicsAdapter adapt
     }
 }
 
-void HybridShadowApp::CreateDynamicTextures(const GraphicsAdapter adapter)
+void HybridCubeMapApp::CreateDynamicTextures(const GraphicsAdapter adapter)
 {
     DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
     DXGI_FORMAT depthFormat = DXGI_FORMAT_D32_FLOAT;

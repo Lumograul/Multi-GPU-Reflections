@@ -24,13 +24,13 @@ using namespace PEPEngine;
 using namespace Graphics;
 
 
-class HybridShadowApp :
+class HybridCubeMapApp :
     public Common::D3DApp
 {
 public:
-    HybridShadowApp(HINSTANCE hInstance);
+    HybridCubeMapApp(HINSTANCE hInstance);
 
-    ~HybridShadowApp() override;;
+    ~HybridCubeMapApp() override;;
 
     bool Initialize() override;
 
